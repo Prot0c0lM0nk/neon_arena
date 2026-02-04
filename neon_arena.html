@@ -214,38 +214,75 @@
     <div id="blackScreen"></div>
 
     <script>
-        // Game constants and variables
-        const ENEMY_COLORS = [0xff0000, 0x00ff00, 0x0000ff, 0xffff00, 0xff00ff];
-        const ENEMY_SPEED = 0.02;
-        const ENEMY_DAMAGE = 5;
-        const ENEMY_FIRE_RATE = 1000; // ms
-        const ENEMY_RANGE = 15;
+        // ================================================
+        // GAME CONSTANTS AND CONFIGURATION
+        // ================================================
         
-        // Game state
+        /**
+         * Enemy configuration constants
+         * These values define enemy behavior and appearance
+         */
+        const ENEMY_COLORS = [0xff0000, 0x00ff00, 0x0000ff, 0xffff00, 0xff00ff]; // Color palette for enemy variety
+        const ENEMY_SPEED = 0.02;          // Movement speed per frame
+        const ENEMY_DAMAGE = 5;            // Damage per enemy bullet
+        const ENEMY_FIRE_RATE = 1000;      // Time between shots in milliseconds
+        const ENEMY_RANGE = 15;            // Distance at which enemies start shooting
+        
+        // ================================================
+        // GAME STATE VARIABLES
+        // ================================================
+        
+        /**
+         * Three.js core objects - manage the 3D scene, rendering, and user interaction
+         */
         let scene, camera, renderer, controls, clock;
+        
+        /**
+         * Input and collision detection systems
+         */
         let raycaster, mouse;
+        
+        /**
+         * Game entities - player, enemies, and projectiles
+         */
         let player, enemies = [], bullets = [], enemyBullets = [];
-        let weaponType = 'rifle';
-        let ammo = 0;
-        let maxAmmo = 0;
-        let health = 100;
-        let round = 1;
-        let enemiesInRound = 5;
-        let gameStarted = false;
-        let lastFireTime = 0;
-        let lastEnemyFireTime = 0;
-        let playerHeight = 1.6;
-        let playerSpeed = 0.2;
-        let playerDirection = new THREE.Vector3();
-        let moveForward = false;
+        
+        /**
+         * Player state and weapon management
+         */
+        let weaponType = 'rifle';           // Current selected weapon
+        let ammo = 0;                       // Current ammo count
+        let maxAmmo = 0;                    // Maximum ammo capacity
+        let health = 100;                   // Player health
+        
+        /**
+         * Game progression and timing
+         */
+        let round = 1;                      // Current round number
+        let enemiesInRound = 5;             // Number of enemies this round
+        let gameStarted = false;            // Game active state
+        let lastFireTime = 0;               // Timestamp of last player shot
+        let lastEnemyFireTime = 0;          // Timestamp of last enemy shot
+        
+        /**
+         * Player physics and movement
+         */
+        let playerHeight = 1.6;             // Player camera height (meters)
+        let playerSpeed = 0.2;              // Movement speed per frame
+        let playerDirection = new THREE.Vector3(); // Current movement direction
+        let moveForward = false;            // Keyboard input flags
         let moveBackward = false;
         let moveLeft = false;
         let moveRight = false;
-        let canJump = false;
-        let velocity = new THREE.Vector3();
-        let worldWidth = 50;
-        let worldDepth = 50;
-        let obstacles = [];
+        let canJump = false;                // Jump state
+        let velocity = new THREE.Vector3(); // Physics velocity vector
+        
+        /**
+         * World configuration
+         */
+        let worldWidth = 50;                // Arena width in meters
+        let worldDepth = 50;                // Arena depth in meters
+        let obstacles = [];                 // Array of wall objects for collision
 
         // Weapon configurations
         const weapons = {
