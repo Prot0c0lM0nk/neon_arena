@@ -4,6 +4,8 @@
 # But allow these specific files
 !neon_arena.html
 !game_features.md
+!src/
+!src/**
 
 # Always ignore these common files/folders
 .DS_Store
