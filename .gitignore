@@ -6,6 +6,7 @@
 !game_features.md
 !src/
 !src/**
+!src/**/*
 
 # Always ignore these common files/folders
 .DS_Store
