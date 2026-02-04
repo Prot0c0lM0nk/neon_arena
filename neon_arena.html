@@ -284,45 +284,71 @@
         let worldDepth = 50;                // Arena depth in meters
         let obstacles = [];                 // Array of wall objects for collision
 
-        // Weapon configurations
+        /**
+         * Weapon configuration constants
+         * Defines the three selectable weapon types with their unique characteristics.
+         * 
+         * INVARIANT: All weapons must have consistent property set for UI rendering
+         * INVARIANT: Fire rate is in milliseconds between shots (lower = faster)
+         * INVARIANT: Spread is in radians - affects bullet trajectory randomization
+         * INVARIANT: Tracer properties control visual bullet representation
+         * 
+         * DEPENDENCIES: Used by fireWeapon(), createBullet(), reloadWeapon()
+         * DEPENDENCIES: Referenced by startGame() for initial ammo setup
+         * DEPENDENCIES: Referenced by HUD update for ammo display
+         */
         const weapons = {
             rifle: {
-                damage: 20,
-                fireRate: 150,
-                range: 100,
-                maxAmmo: 30,
-                ammo: 30,
-                spread: 0.05,
-                color: 0x00ff00,
-                tracerWidth: 0.05,
-                tracerLength: 1.0
+                damage: 20,           // Moderate damage per shot
+                fireRate: 150,        // 150ms between shots (~6.6 shots/sec)
+                range: 100,           // Effective range in meters
+                maxAmmo: 30,          // Magazine capacity
+                ammo: 30,             // Current ammo (starts full)
+                spread: 0.05,         // Slight accuracy variance
+                color: 0x00ff00,      // Green tracer
+                tracerWidth: 0.05,    // Visual tracer thickness
+                tracerLength: 1.0     // Visual tracer length
             },
             shotgun: {
-                damage: 10,
-                fireRate: 800,
-                range: 30,
-                maxAmmo: 8,
-                ammo: 8,
-                spread: 0.2,
-                pellets: 8,
-                color: 0xff0000,
-                tracerWidth: 0.1,
-                tracerLength: 0.5
+                damage: 10,           // Low per-pellet damage
+                fireRate: 800,        // 800ms between shots (slow)
+                range: 30,            // Short effective range
+                maxAmmo: 8,           // Shell capacity
+                ammo: 8,              // Current ammo
+                spread: 0.2,          // Wide pellet spread
+                pellets: 8,           // Number of pellets per shot
+                color: 0xff0000,      // Red tracer
+                tracerWidth: 0.1,     // Thicker tracers for visibility
+                tracerLength: 0.5     // Shorter tracers
             },
             sniper: {
-                damage: 80,
-                fireRate: 1200,
-                range: 200,
-                maxAmmo: 5,
-                ammo: 5,
-                spread: 0.01,
-                color: 0x0000ff,
-                tracerWidth: 0.03,
-                tracerLength: 2.0
+                damage: 80,           // High damage per shot
+                fireRate: 1200,       // 1200ms between shots (very slow)
+                range: 200,           // Long effective range
+                maxAmmo: 5,           // Small magazine
+                ammo: 5,              // Current ammo
+                spread: 0.01,         // Very accurate
+                color: 0x0000ff,      // Blue tracer
+                tracerWidth: 0.03,    // Thin tracer
+                tracerLength: 2.0     // Long tracer for visibility
             }
         };
         
-        // Initialize the game
+        /**
+         * Game initialization entry point.
+         * Orchestrates the three-phase startup: event listeners, scene setup, animation loop.
+         * 
+         * INTENT: Single entry point for all game initialization
+         * INTENT: Separation of concerns - input, rendering, and loop are distinct phases
+         * 
+         * INVARIANT: Must be called after DOM is fully loaded
+         * INVARIANT: Three.js library must be loaded before this executes
+         * 
+         * DEPENDENCIES: Calls setupEventListeners(), setupScene(), animate()
+         * DEPENDENCIES: Relies on global Three.js objects (THREE, PointerLockControls)
+         * 
+         * NOTE: This is called at the bottom of the script to start the game
+         */
         function init() {
             // Set up event listeners
             setupEventListeners();
@@ -334,200 +360,387 @@
             animate();
         }
         
+        /**
+         * Sets up all event listeners for user input.
+         * Handles weapon selection, game start, mouse input, and keyboard controls.
+         * 
+         * INTENT: Centralize all input event registration for easier management
+         * INTENT: Weapon selection is visual feedback only until startGame() is called
+         * 
+         * INVARIANT: Event listeners must be attached before game starts
+         * INVARIANT: Pointer lock controls are NOT initialized here - that's in setupScene()
+         * 
+         * DEPENDENCIES: Requires DOM elements: .weapon-card, #startButton
+         * DEPENDENCIES: Calls startGame() on button click
+         * DEPENDENCIES: Delegates to onMouseMove, onMouseClick, onKeyDown, onKeyUp
+         * 
+         * NOTE: Mouse movement listener may be redundant since PointerLockControls
+         *       handles camera rotation internally. Kept for potential future use.
+         */
         function setupEventListeners() {
-            // Weapon selection
+            // Weapon selection - visual feedback and state update
             console.log('Setting up EventListeners');
             document.querySelectorAll('.weapon-card').forEach(card => {
                 card.addEventListener('click', () => {
+                    // Reset all cards to default border
                     document.querySelectorAll('.weapon-card').forEach(c => c.style.borderColor = '#00ffea');
+                    // Highlight selected card
                     card.style.borderColor = '#ff00ff';
+                    // Update global weapon selection state
                     weaponType = card.dataset.weapon;
                 });
             });
             
-            // Start button
+            // Start button - initiates game session
             document.getElementById('startButton').addEventListener('click', startGame);
             
-            // Mouse movement
+            // Mouse movement - tracks cursor for potential UI interactions
+            // Note: Camera rotation is handled by PointerLockControls, not this
             document.addEventListener('mousemove', onMouseMove, false);
             
-            // Mouse click
+            // Mouse click - triggers weapon firing during gameplay
             document.addEventListener('click', onMouseClick, false);
             
-            // Keyboard controls
+            // Keyboard controls - movement and actions
             document.addEventListener('keydown', onKeyDown, false);
             document.addEventListener('keyup', onKeyUp, false);
         }
         
+        /**
+         * Initializes the Three.js scene, camera, renderer, and core systems.
+         * This is the rendering foundation - must complete successfully before game can run.
+         * 
+         * INTENT: Create all Three.js objects needed for 3D rendering
+         * INTENT: Separate scene initialization from game logic initialization
+         * 
+         * INVARIANT: scene, camera, renderer must be created before other objects
+         * INVARIANT: PointerLockControls requires camera and document.body
+         * INVARIANT: Clock must be created before animate() uses it
+         * INVARIANT: Raycaster must exist before any collision detection
+         * 
+         * DEPENDENCIES: Calls createPlayer(), createEnvironment()
+         * DEPENDENCIES: Attaches resize listener calling onWindowResize()
+         * DEPENDENCIES: Appends renderer canvas to #gameContainer DOM element
+         * 
+         * THREE.JS OBJECTS CREATED:
+         *   - Scene with dark blue background and fog for depth
+         *   - PerspectiveCamera at player height
+         *   - WebGLRenderer with antialiasing and shadows
+         *   - PointerLockControls for FPS-style mouse look
+         *   - Clock for delta time calculation
+         *   - Raycaster for collision and shooting detection
+         * 
+         * NOTE: Fog (1-100 range) helps hide the edge of the world and improves performance
+         * NOTE: Camera FOV 75 is standard for FPS games
+         */
         function setupScene() {
-            // Create scene
+            // Create scene with dark blue background and atmospheric fog
             scene = new THREE.Scene();
             scene.background = new THREE.Color(0x111122);
             scene.fog = new THREE.Fog(0x111122, 1, 100);
             
-            // Create camera
+            // Create camera at player height
             camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
             camera.position.y = playerHeight;
             
-            // Create renderer
+            // Create renderer with antialiasing and shadow support
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.shadowMap.enabled = true;
             document.getElementById('gameContainer').appendChild(renderer.domElement);
 
-            // Initialize the "neck" so the mouse can turn the camera
+            // Initialize PointerLockControls for FPS-style mouse look
+            // This creates a "neck" object that the camera is attached to
             controls = new THREE.PointerLockControls(camera, document.body);
             scene.add(controls.getObject());
 
-            // Create clock
+            // Create clock for delta time calculation in animation loop
             clock = new THREE.Clock();
             
-            // Create raycaster
+            // Create raycaster for collision detection and shooting
             raycaster = new THREE.Raycaster();
             mouse = new THREE.Vector2();
             
-            // Create player
+            // Create player entity
             createPlayer();
             
-            // Create environment
+            // Create environment (floor, walls, lighting)
             createEnvironment();
             
-            // Handle window resize
+            // Handle window resize events
             window.addEventListener('resize', onWindowResize, false);
         }
         
+        /**
+         * Creates the player entity as a container object for position tracking.
+         * The actual visual representation is the camera itself.
+         * 
+         * INTENT: Separate player logical position from camera visual representation
+         * INTENT: Provide a target for enemies to track and shoot at
+         * 
+         * INVARIANT: Player position must stay synchronized with camera position
+         * INVARIANT: Player Y position is fixed at playerHeight when on ground
+         * 
+         * DEPENDENCIES: Called by setupScene()
+         * DEPENDENCIES: Position is updated by updatePlayer() every frame
+         * DEPENDENCIES: Referenced by enemies for targeting and collision detection
+         * 
+         * NOTE: This is an invisible Object3D - the camera is what the player sees through
+         * NOTE: Player position is the source of truth; camera copies from it
+         */
         function createPlayer() {
-            // Player is represented by the camera
+            // Player is represented by an invisible Object3D at camera height
+            // This separates the logical player entity from the visual camera
             player = new THREE.Object3D();
             player.position.y = playerHeight;
             scene.add(player);
         }
         
+        /**
+         * Creates the game environment: floor, cover walls, and lighting.
+         * This establishes the playable arena with tactical cover elements.
+         * 
+         * INTENT: Create a visually cohesive arena with tactical cover
+         * INTENT: Ensure walls don't spawn too close to player spawn (0,0)
+         * INTENT: Provide both ambient and directional lighting with shadows
+         * 
+         * INVARIANT: Floor must be at Y=0 (rotated -90 degrees on X)
+         * INVARIANT: Walls must be at least 5 meters from center (player spawn)
+         * INVARIANT: Exactly 10 walls are created for cover
+         * INVARIANT: All walls are added to obstacles[] for collision detection
+         * INVARIANT: Wall Y position is half its height (so it sits on floor)
+         * 
+         * DEPENDENCIES: Called by setupScene()
+         * DEPENDENCIES: Uses worldWidth, worldDepth for spawn boundaries
+         * DEPENDENCIES: Pushes wall meshes to global obstacles[] array
+         * 
+         * WALL GENERATION ALGORITHM:
+         *   1. Random dimensions: width 2-7m, height 1-3m, depth 2-7m
+         *   2. Random position within arena (with 5m margin from edges)
+         *   3. Reject positions within 5m of center (player spawn protection)
+         *   4. Add to scene and obstacles array
+         * 
+         * LIGHTING SETUP:
+         *   - Ambient: 0x404040 (soft gray fill)
+         *   - Directional: White, intensity 0.8, from (0, 20, 10) with shadows
+         * 
+         * NOTE: Wall spawn uses rejection sampling - may loop multiple times per wall
+         * NOTE: Material roughness/metalness gives subtle industrial aesthetic
+         */
         function createEnvironment() {
-            // Create floor
+            // Create floor plane - rotated -90 degrees on X to be horizontal
             const floorGeometry = new THREE.PlaneGeometry(worldWidth, worldDepth);
             const floorMaterial = new THREE.MeshStandardMaterial({ 
-                color: 0x333344,
-                roughness: 0.8,
-                metalness: 0.2
+                color: 0x333344,      // Dark blue-gray
+                roughness: 0.8,       // Matte finish
+                metalness: 0.2        // Slight metallic sheen
             });
             const floor = new THREE.Mesh(floorGeometry, floorMaterial);
-            floor.rotation.x = -Math.PI / 2;
-            floor.receiveShadow = true;
+            floor.rotation.x = -Math.PI / 2;  // Rotate to horizontal
+            floor.receiveShadow = true;        // Receive shadows from objects
             scene.add(floor);
             
-            // Add some walls for cover
+            // Generate 10 random walls for tactical cover
             for (let i = 0; i < 10; i++) {
-                const wallWidth = Math.random() * 5 + 2;
-                const wallHeight = Math.random() * 2 + 1;
-                const wallDepth = Math.random() * 5 + 2;
+                // Random wall dimensions
+                const wallWidth = Math.random() * 5 + 2;   // 2-7 meters
+                const wallHeight = Math.random() * 2 + 1;  // 1-3 meters
+                const wallDepth = Math.random() * 5 + 2;   // 2-7 meters
+                
                 const wallGeometry = new THREE.BoxGeometry(wallWidth, wallHeight, wallDepth);
                 const wallMaterial = new THREE.MeshStandardMaterial({ 
-                    color: 0x444455,
-                    roughness: 0.7,
-                    metalness: 0.3
+                    color: 0x444455,      // Slightly lighter than floor
+                    roughness: 0.7,       // Slightly less rough
+                    metalness: 0.3        // More metallic
                 });
                 const wall = new THREE.Mesh(wallGeometry, wallMaterial);
 
                 let wallX, wallZ;
                 let tooClose = true;
 
-                // Keep picking a random spot until it's far enough from the center (0,0)
+                // Rejection sampling: keep trying until position is valid
                 while (tooClose) {
+                    // Random position within arena bounds (with 5m margin)
                     wallX = Math.random() * (worldWidth - 10) - (worldWidth/2 - 5);
                     wallZ = Math.random() * (worldDepth - 10) - (worldDepth/2 - 5);
                     
-                    // Calculate distance from center (0,0)
+                    // Calculate distance from center (0,0) - player spawn point
                     const distanceFromCenter = Math.sqrt(wallX * wallX + wallZ * wallZ);
-                    if (distanceFromCenter > 5) { // 5 meters is a safe distance
+                    if (distanceFromCenter > 5) {  // 5 meters is safe distance
                         tooClose = false;
                     }
                 }
 
+                // Position wall so it sits on floor (Y at half height)
                 wall.position.set(wallX, wallHeight/2, wallZ);
-                wall.castShadow = true;
-                wall.receiveShadow = true;
+                wall.castShadow = true;      // Cast shadows on other objects
+                wall.receiveShadow = true;   // Receive shadows
                 scene.add(wall);
-                obstacles.push(wall); // Make sure this is here for your collision check!
+                
+                // CRITICAL: Add to obstacles array for collision detection
+                obstacles.push(wall);
             }
             
-            // Add ambient light
+            // Ambient light - soft fill lighting from all directions
             const ambientLight = new THREE.AmbientLight(0x404040);
             scene.add(ambientLight);
             
-            // Add directional light
+            // Directional light - main light source with shadows
             const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-            directionalLight.position.set(0, 20, 10);
-            directionalLight.castShadow = true;
+            directionalLight.position.set(0, 20, 10);  // Above and slightly forward
+            directionalLight.castShadow = true;         // Enable shadow casting
             scene.add(directionalLight);
         }
         
+        /**
+         * Spawns enemy entities for a new round.
+         * Clears existing enemies and creates new ones with valid spawn positions.
+         * 
+         * INTENT: Provide fresh enemy set for each round
+         * INTENT: Ensure enemies spawn in valid locations (not on player or in walls)
+         * INTENT: Cycle through color palette for visual variety
+         * 
+         * INVARIANT: All existing enemies are removed before new ones are created
+         * INVARIANT: Enemies spawn at least 10 meters from player
+         * INVARIANT: Enemies spawn at least 3 meters from any wall/obstacle
+         * INVARIANT: Enemy Y position is fixed at 1 (half their height)
+         * INVARIANT: Enemy health is always initialized to 100
+         * INVARIANT: Enemy lastShot is always initialized to 0
+         * 
+         * DEPENDENCIES: Called by startGame() and nextRound()
+         * DEPENDENCIES: Uses ENEMY_COLORS for visual variety
+         * DEPENDENCIES: Uses worldWidth, worldDepth for spawn boundaries
+         * DEPENDENCIES: References player.position for distance check
+         * DEPENDENCIES: References obstacles[] for collision check
+         * DEPENDENCIES: Adds enemies to global enemies[] array
+         * 
+         * ENEMY MESH PROPERTIES:
+         *   - Geometry: ConeGeometry(0.5 radius, 2 height, 8 segments)
+         *   - Material: MeshStandardMaterial with color from ENEMY_COLORS
+         *   - Position: Y=1 (sits on floor, cone height is 2)
+         *   - Custom properties: health (number), lastShot (timestamp)
+         * 
+         * SPAWN VALIDATION RULES:
+         *   1. Must be >10m from player (fair engagement distance)
+         *   2. Must be >3m from any obstacle (not inside walls)
+         *   3. Within arena bounds (worldWidth/Depth - 10 margin)
+         * 
+         * NOTE: Uses rejection sampling - may loop multiple times per enemy
+         * NOTE: Enemy cone points up by default, lookAt() in updateEnemies() orients them
+         */
         function createEnemies(count) {
-            // Remove existing enemies
+            // Remove existing enemies from scene and clear array
             enemies.forEach(enemy => scene.remove(enemy));
             enemies = [];
             
-            // Create new enemies
+            // Create requested number of enemies
             for (let i = 0; i < count; i++) {
+                // Cone geometry: radius 0.5, height 2, 8 radial segments
                 const enemyGeometry = new THREE.ConeGeometry(0.5, 2, 8);
                 const enemyMaterial = new THREE.MeshStandardMaterial({ 
-                    color: ENEMY_COLORS[i % ENEMY_COLORS.length],
+                    color: ENEMY_COLORS[i % ENEMY_COLORS.length],  // Cycle through colors
                     roughness: 0.5,
                     metalness: 0.5
                 });
                 const enemy = new THREE.Mesh(enemyGeometry, enemyMaterial);
                 
-                // Keep picking a random position until we find a valid one
+                // Find valid spawn position using rejection sampling
                 let positionFound = false;
                 while (!positionFound) {
+                    // Random position within arena bounds (5m margin from edges)
                     const enemyX = Math.random() * (worldWidth - 10) - (worldWidth/2 - 5);
                     const enemyZ = Math.random() * (worldDepth - 10) - (worldDepth/2 - 5);
                     
-                    enemy.position.set(enemyX, 1, enemyZ);  // Set the position
+                    enemy.position.set(enemyX, 1, enemyZ);  // Y=1 for cone geometry
                     
-                    // Rule 1: Don't spawn on the player
+                    // Rule 1: Don't spawn too close to player (minimum 10m)
                     const distanceToPlayer = enemy.position.distanceTo(player.position);
                     if (distanceToPlayer < 10) {
                         continue;  // Try again
                     }
 
-                    // Rule 2: Don't spawn in a wall
+                    // Rule 2: Don't spawn inside or too close to walls
                     if (obstacles.some(obs => enemy.position.distanceTo(obs.position) < 3.0)) {
                         continue;  // Try again
                     }
                     
-                    positionFound = true;  // Found a valid spot!
+                    positionFound = true;  // Valid position found
                 }
                 
-                enemy.health = 100;
-                enemy.lastShot = 0;
-                enemy.castShadow = true;
+                // Initialize enemy state
+                enemy.health = 100;        // Full health
+                enemy.lastShot = 0;        // Timestamp of last shot (0 = never)
+                enemy.castShadow = true;   // Cast shadows
                 scene.add(enemy);
                 enemies.push(enemy);
             }
         }
         
+        /**
+         * Transitions from start screen to active gameplay.
+         * Initializes game state, spawns first round enemies, and enables controls.
+         * 
+         * INTENT: Single entry point for game session start
+         * INTENT: Reset all game state to initial values
+         * INTENT: Lock pointer for FPS-style camera control
+         * 
+         * INVARIANT: Must be called after weapon selection (weaponType is set)
+         * INVARIANT: Start screen must be visible when called
+         * INVARIANT: Player health always starts at 100
+         * INVARIANT: Round always starts at 1
+         * INVARIANT: First round always has 5 enemies
+         * INVARIANT: gameStarted is set to true AFTER all initialization
+         * 
+         * DEPENDENCIES: Called by start button click (setupEventListeners)
+         * DEPENDENCIES: Uses weaponType selected in UI
+         * DEPENDENCIES: References weapons[] for ammo initialization
+         * DEPENDENCIES: Calls createEnemies(), updateHUD()
+         * DEPENDENCIES: Uses PointerLockControls for mouse capture
+         * 
+         * STATE INITIALIZED:
+         *   - ammo, maxAmmo from selected weapon
+         *   - health = 100
+         *   - round = 1
+         *   - enemiesInRound = 5
+         *   - gameStarted = true
+         * 
+         * UI TRANSITIONS:
+         *   - Hides #startScreen
+         *   - Shows #gameContainer (canvas)
+         * 
+         * POINTER LOCK:
+         *   - Requests browser pointer lock with vendor prefixes
+         *   - Also calls controls.lock() for PointerLockControls
+         * 
+         * NOTE: Vendor prefixes (moz, webkit) for older browser compatibility
+         * NOTE: Console log for debugging weapon selection
+         */
         function startGame() {
-            // Hide start screen
+            // Log selected weapon for debugging
             console.log('Starting game with weapon:', weaponType);
+            
+            // Hide start screen, show game canvas
             document.getElementById('startScreen').style.display = 'none';
             document.getElementById('gameContainer').style.display = 'block';
             
-            // Initialize game state
+            // Initialize game state from selected weapon
             const weapon = weapons[weaponType];
             ammo = weapon.ammo;
             maxAmmo = weapon.maxAmmo;
+            
+            // Reset player and round state
             health = 100;
             round = 1;
             enemiesInRound = 5;
             
-            // Create enemies for first round
+            // Spawn first round enemies
             createEnemies(enemiesInRound);
             
-            // Update HUD
+            // Update HUD with initial values
             updateHUD();
             
-            // Enable pointer lock
+            // Enable pointer lock for FPS controls
+            // Vendor prefixes for cross-browser compatibility
             const element = document.body;
             element.requestPointerLock = element.requestPointerLock || 
                                        element.mozRequestPointerLock || 
@@ -535,39 +748,115 @@
             element.requestPointerLock();
             controls.lock();
 
+            // Mark game as active - enables update loops
             gameStarted = true;
         }
         
+        /**
+         * Handles player death and game session cleanup.
+         * Transitions from gameplay back to start screen with visual effects.
+         * 
+         * INTENT: Provide clear feedback for game over condition
+         * INTENT: Clean up game state and return to menu
+         * INTENT: Create dramatic death sequence (game over text -> black screen -> menu)
+         * 
+         * INVARIANT: gameStarted is set to false immediately
+         * INVARIANT: Pointer lock is released to allow menu interaction
+         * INVARIANT: Camera is reset to default position/rotation
+         * INVARIANT: Total transition time is 4 seconds (2s delay + 2s black screen)
+         * 
+         * DEPENDENCIES: Called when health <= 0 (in updateBullets)
+         * DEPENDENCIES: Uses DOM elements: #gameOver, #blackScreen, #gameContainer, #startScreen
+         * DEPENDENCIES: References camera, playerHeight for reset
+         * 
+         * DEATH SEQUENCE TIMELINE:
+         *   T+0s:   gameStarted = false, show "GAME OVER" text
+         *   T+0s:   Release pointer lock
+         *   T+2s:   Show black screen (covers everything)
+         *   T+4s:   Hide black screen, hide game over, hide canvas
+         *   T+4s:   Show start screen, reset camera
+         * 
+         * UI STATE CHANGES:
+         *   - Shows #gameOver (red text overlay)
+         *   - Shows #blackScreen (full screen black)
+         *   - Hides #gameContainer (canvas)
+         *   - Shows #startScreen (flex layout)
+         * 
+         * CAMERA RESET:
+         *   - Rotation: (0, 0, 0) - facing forward
+         *   - Position Y: playerHeight (1.6m)
+         * 
+         * NOTE: Vendor prefixes for exitPointerLock (cross-browser compatibility)
+         * NOTE: Nested setTimeout creates the two-phase transition
+         */
         function gameOver() {
+            // Immediately stop game updates
             gameStarted = false;
+            
+            // Show game over text
             document.getElementById('gameOver').style.display = 'block';
             
-            // Disable pointer lock
+            // Release pointer lock to allow mouse interaction with menu
             document.exitPointerLock = document.exitPointerLock || 
                                      document.mozExitPointerLock || 
                                      document.webkitExitPointerLock;
             document.exitPointerLock();
             
-            // Show black screen after 2 seconds
+            // Two-phase transition: game over text -> black screen -> menu
             setTimeout(() => {
+                // Phase 1: Show black screen after 2 seconds
                 document.getElementById('blackScreen').style.display = 'block';
+                
                 setTimeout(() => {
+                    // Phase 2: After another 2 seconds, return to menu
                     document.getElementById('blackScreen').style.display = 'none';
                     document.getElementById('gameOver').style.display = 'none';
                     document.getElementById('gameContainer').style.display = 'none';
                     document.getElementById('startScreen').style.display = 'flex';
                     
-                    // Reset camera
-                    camera.rotation.set(0, 0, 0);
+                    // Reset camera to default state
+                    camera.rotation.set(0, 0, 0);  // Facing forward
                     camera.position.y = playerHeight;
                 }, 2000);
             }, 2000);
         }
         
+        /**
+         * Progresses to the next round with increased difficulty.
+         * Increments round counter, calculates enemy count, and spawns new enemies.
+         * 
+         * INTENT: Provide progressive difficulty curve
+         * INTENT: Scale enemy count with round number
+         * 
+         * INVARIANT: Round number always increments by 1
+         * INVARIANT: Enemy count formula: 5 + floor(round * 1.5)
+         * INVARIANT: HUD is updated after enemy creation
+         * 
+         * DEPENDENCIES: Called when all enemies defeated (in updateBullets)
+         * DEPENDENCIES: Calls createEnemies() with calculated count
+         * DEPENDENCIES: Calls updateHUD() to show new round number
+         * 
+         * DIFFICULTY PROGRESSION:
+         *   Round 1: 5 + floor(1 * 1.5) = 6 enemies
+         *   Round 2: 5 + floor(2 * 1.5) = 8 enemies
+         *   Round 3: 5 + floor(3 * 1.5) = 9 enemies
+         *   Round 5: 5 + floor(5 * 1.5) = 12 enemies
+         *   Round 10: 5 + floor(10 * 1.5) = 20 enemies
+         * 
+         * NOTE: Linear scaling with 1.5 multiplier provides gradual difficulty increase
+         * NOTE: Floor ensures integer enemy counts
+         */
         function nextRound() {
+            // Increment round counter
             round++;
+            
+            // Calculate enemy count: base 5 + 1.5 per round
             enemiesInRound = 5 + Math.floor(round * 1.5);
+            
+            // Spawn new wave of enemies
             createEnemies(enemiesInRound);
+            
+            // Update HUD to show new round
             updateHUD();
         }
         
