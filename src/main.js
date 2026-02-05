@@ -1,9 +1,10 @@
 /**
- * Main game entry point - Phase 3: Entity Factories Integrated
+ * Neon Arena FPS - Modular Version
+ * Main entry point that integrates all game modules
  * 
- * INTENT: Test new entity modules alongside original code
- * INTENT: Verify modular extraction maintains game behavior
- * INTENT: Incrementally replace global functions with module imports
+ * INTENT: Wire all extracted modules into a functional game
+ * INTENT: Maintain clean separation between game state, rendering, and input
+ * INTENT: Provide a maintainable foundation for future enhancements
  */
 
 // ================================================
@@ -27,252 +28,385 @@ import { onWindowResize, createResizeHandler } from './utils/resize.js';
 import { onMouseMove, onMouseClick, onKeyDown, onKeyUp } from './utils/input.js';
 
 // ================================================
-// IMPORT ENTITY FACTORIES (Phase 3)
+// IMPORT ENTITY FACTORIES
 // ================================================
 import { createPlayer } from './entities/player.js';
 import { createEnvironment } from './entities/world.js';
 import { createEnemies, clearEnemies } from './entities/enemy.js';
 
 // ================================================
-// GLOBAL STATE VARIABLES
+// IMPORT CORE SYSTEMS
 // ================================================
-let scene, camera, renderer, controls, clock;
-let raycaster, mouse;
-let player, enemies = [], bullets = [], enemyBullets = [];
-let weaponType = 'rifle';
-let ammo = 0, maxAmmo = 0, health = 100;
-let round = 1, enemiesInRound = 5;
-let gameStarted = false;
-let lastFireTime = 0, lastEnemyFireTime = 0;
-let playerDirection = new THREE.Vector3();
-let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
-let canJump = false, velocity = new THREE.Vector3();
-let obstacles = [];
+import { setupScene, createAnimationLoop, handleResize } from './core/engine.js';
+import { startGame as startGameLogic, gameOver as gameOverLogic, nextRound as nextRoundLogic, fireWeapon as fireWeaponLogic, reloadWeapon } from './core/game.js';
+import { updatePlayer, updateEnemies, updateBullets } from './core/update.js';
 
-// Movement flags object for input module
-const movementFlags = {
-    moveForward, moveBackward, moveLeft, moveRight
+// ================================================
+// GAME STATE
+// ================================================
+const gameState = {
+    // Three.js core objects
+    scene: null,
+    camera: null,
+    renderer: null,
+    controls: null,
+    clock: null,
+    raycaster: null,
+    mouse: null,
+    
+    // Game entities
+    player: null,
+    enemies: [],
+    bullets: [],
+    enemyBullets: [],
+    obstacles: [],
+    
+    // Player state
+    weaponType: 'rifle',
+    ammo: 0,
+    maxAmmo: 0,
+    health: 100,
+    
+    // Game progression
+    round: 1,
+    enemiesInRound: 5,
+    gameStarted: false,
+    lastFireTime: 0,
+    
+    // Movement state
+    moveForward: false,
+    moveBackward: false,
+    moveLeft: false,
+    moveRight: false,
+    canJump: false,
+    velocity: new THREE.Vector3()
 };
 
-// Player state object for input module
-const playerState = {
-    canJump, velocity
-};
-
-console.log('=== Phase 3: Entity Factories Loaded ===');
-console.log('Weapon config:', weapons);
-console.log('Constants loaded');
-console.log('Utility modules imported');
-console.log('Entity factories imported:', { createPlayer, createEnvironment, createEnemies });
-
 // ================================================
-// TEST: Entity Factory Integration
+// INITIALIZATION
 // ================================================
 
-/**
- * Test player creation with factory function
- */
-function testPlayerFactory() {
-    console.log('Testing Player Factory...');
+function init() {
+    console.log('=== Neon Arena FPS - Modular Version ===');
     
-    if (!scene) {
-        console.log('Scene not ready - skipping player test');
-        return;
-    }
+    // Set up event listeners
+    setupEventListeners();
     
-    // Create player using factory
-    const testPlayer = createPlayer(scene, PLAYER_HEIGHT);
+    // Set up the scene
+    const container = document.getElementById('gameContainer');
+    const sceneSetup = setupScene(container, PLAYER_HEIGHT);
     
-    // Verify player was created correctly
-    console.log('Player created:', testPlayer);
-    console.log('Player position Y:', testPlayer.position.y, '(expected:', PLAYER_HEIGHT, ')');
-    console.log('Player in scene:', scene.children.includes(testPlayer));
+    // Store scene references
+    gameState.scene = sceneSetup.scene;
+    gameState.camera = sceneSetup.camera;
+    gameState.renderer = sceneSetup.renderer;
+    gameState.controls = sceneSetup.controls;
+    gameState.clock = sceneSetup.clock;
+    gameState.raycaster = sceneSetup.raycaster;
+    gameState.mouse = sceneSetup.mouse;
     
-    // Clean up test player
-    scene.remove(testPlayer);
-    console.log('Player factory test complete');
+    // Create player
+    gameState.player = createPlayer(gameState.scene, PLAYER_HEIGHT);
+    
+    // Create environment
+    gameState.obstacles = createEnvironment(gameState.scene, WORLD_WIDTH, WORLD_DEPTH);
+    
+    // Initialize minimap
+    initMinimap();
+    
+    // Handle window resize
+    window.addEventListener('resize', () => handleResize(gameState.camera, gameState.renderer), false);
+    
+    // Start animation loop
+    const animate = createAnimationLoop({
+        clock: gameState.clock,
+        renderer: gameState.renderer,
+        scene: gameState.scene,
+        camera: gameState.camera,
+        updateCallback: updateGame,
+        gameStartedCheck: () => gameState.gameStarted
+    });
+    
+    animate();
+    
+    console.log('Game initialized successfully');
 }
 
-/**
- * Test environment creation with factory function
- */
-function testEnvironmentFactory() {
-    console.log('Testing Environment Factory...');
+// ================================================
+// EVENT LISTENERS
+// ================================================
+
+function setupEventListeners() {
+    // Weapon selection
+    document.querySelectorAll('.weapon-card').forEach(card => {
+        card.addEventListener('click', () => {
+            document.querySelectorAll('.weapon-card').forEach(c => c.style.borderColor = '#00ffea');
+            card.style.borderColor = '#ff00ff';
+            gameState.weaponType = card.dataset.weapon;
+        });
+    });
     
-    if (!scene) {
-        console.log('Scene not ready - skipping environment test');
-        return;
-    }
+    // Start button
+    document.getElementById('startButton').addEventListener('click', startGame);
     
-    // Create environment using factory
-    const testObstacles = createEnvironment(scene, WORLD_WIDTH, WORLD_DEPTH);
-    
-    // Verify environment was created
-    console.log('Obstacles created:', testObstacles.length, '(expected: 10)');
-    console.log('Scene children count:', scene.children.length);
-    
-    // Verify floor exists (should be first child added)
-    const floor = scene.children.find(child => child.geometry && child.geometry.type === 'PlaneGeometry');
-    console.log('Floor created:', !!floor);
-    
-    // Verify lights exist
-    const lights = scene.children.filter(child => child.isLight);
-    console.log('Lights created:', lights.length, '(expected: 2)');
-    
-    console.log('Environment factory test complete');
-    
-    return testObstacles;
+    // Mouse and keyboard
+    document.addEventListener('mousemove', (e) => onMouseMove(e, gameState.gameStarted, gameState.mouse), false);
+    document.addEventListener('click', (e) => {
+        if (gameState.gameStarted) fireWeapon();
+    }, false);
+    document.addEventListener('keydown', onKeyDownHandler, false);
+    document.addEventListener('keyup', onKeyUpHandler, false);
 }
 
-/**
- * Test enemy creation with factory function
- */
-function testEnemyFactory() {
-    console.log('Testing Enemy Factory...');
+// ================================================
+// INPUT HANDLERS
+// ================================================
+
+function onKeyDownHandler(event) {
+    if (!gameState.gameStarted) return;
     
-    if (!scene || !player) {
-        console.log('Scene or player not ready - skipping enemy test');
-        return;
+    switch (event.keyCode) {
+        case 87: // W
+            gameState.moveForward = true;
+            break;
+        case 83: // S
+            gameState.moveBackward = true;
+            break;
+        case 65: // A
+            gameState.moveLeft = true;
+            break;
+        case 68: // D
+            gameState.moveRight = true;
+            break;
+        case 32: // Space
+            if (gameState.canJump) {
+                gameState.velocity.y = 0.2;
+                gameState.canJump = false;
+            }
+            break;
+        case 82: // R (reload)
+            gameState.ammo = reloadWeapon(
+                gameState.weaponType,
+                weapons,
+                gameState.ammo,
+                (ammo, maxAmmo) => updateHUD(ammo, maxAmmo, gameState.health, gameState.round)
+            );
+            break;
     }
+}
+
+function onKeyUpHandler(event) {
+    if (!gameState.gameStarted) return;
     
-    // Create enemies using factory
-    const testEnemies = createEnemies(
-        scene, 
-        3, // Just 3 for testing
-        ENEMY_COLORS, 
-        player, 
-        obstacles, 
-        WORLD_WIDTH, 
+    switch (event.keyCode) {
+        case 87: // W
+            gameState.moveForward = false;
+            break;
+        case 83: // S
+            gameState.moveBackward = false;
+            break;
+        case 65: // A
+            gameState.moveLeft = false;
+            break;
+        case 68: // D
+            gameState.moveRight = false;
+            break;
+    }
+}
+
+// ================================================
+// GAME FLOW FUNCTIONS
+// ================================================
+
+function startGame() {
+    console.log('Starting game with weapon:', gameState.weaponType);
+    
+    // Hide start screen, show game
+    document.getElementById('startScreen').style.display = 'none';
+    document.getElementById('gameContainer').style.display = 'block';
+    
+    // Initialize game state
+    const weapon = weapons[gameState.weaponType];
+    gameState.ammo = weapon.ammo;
+    gameState.maxAmmo = weapon.maxAmmo;
+    gameState.health = 100;
+    gameState.round = 1;
+    gameState.enemiesInRound = 5;
+    gameState.gameStarted = true;
+    
+    // Clear any existing enemies
+    clearEnemies(gameState.scene, gameState.enemies);
+    gameState.enemies = [];
+    
+    // Spawn first round enemies
+    spawnEnemies(gameState.enemiesInRound);
+    
+    // Update HUD
+    updateHUD(gameState.ammo, gameState.maxAmmo, gameState.health, gameState.round);
+    
+    // Lock pointer
+    const element = document.body;
+    element.requestPointerLock = element.requestPointerLock || 
+                               element.mozRequestPointerLock || 
+                               element.webkitRequestPointerLock;
+    element.requestPointerLock();
+    gameState.controls.lock();
+}
+
+function gameOver() {
+    gameState.gameStarted = false;
+    
+    // Show game over text
+    document.getElementById('gameOver').style.display = 'block';
+    
+    // Release pointer lock
+    document.exitPointerLock = document.exitPointerLock || 
+                             document.mozExitPointerLock || 
+                             document.webkitExitPointerLock;
+    document.exitPointerLock();
+    
+    // Transition sequence
+    setTimeout(() => {
+        document.getElementById('blackScreen').style.display = 'block';
+        
+        setTimeout(() => {
+            document.getElementById('blackScreen').style.display = 'none';
+            document.getElementById('gameOver').style.display = 'none';
+            document.getElementById('gameContainer').style.display = 'none';
+            document.getElementById('startScreen').style.display = 'flex';
+            
+            // Reset camera
+            gameState.camera.rotation.set(0, 0, 0);
+            gameState.camera.position.y = PLAYER_HEIGHT;
+            
+            // Clear enemies
+            clearEnemies(gameState.scene, gameState.enemies);
+            gameState.enemies = [];
+        }, 2000);
+    }, 2000);
+}
+
+function nextRound() {
+    gameState.round++;
+    gameState.enemiesInRound = 5 + Math.floor(gameState.round * 1.5);
+    
+    spawnEnemies(gameState.enemiesInRound);
+    updateHUD(gameState.ammo, gameState.maxAmmo, gameState.health, gameState.round);
+}
+
+function spawnEnemies(count) {
+    const newEnemies = createEnemies(
+        gameState.scene,
+        count,
+        ENEMY_COLORS,
+        gameState.player,
+        gameState.obstacles,
+        WORLD_WIDTH,
+        WORLD_DEPTH
+    );
+    gameState.enemies.push(...newEnemies);
+}
+
+// ================================================
+// WEAPON FUNCTIONS
+// ================================================
+
+function fireWeapon() {
+    const result = fireWeaponLogic({
+        weaponType: gameState.weaponType,
+        weapons: weapons,
+        ammo: gameState.ammo,
+        lastFireTime: gameState.lastFireTime,
+        camera: gameState.camera,
+        scene: gameState.scene,
+        bullets: gameState.bullets,
+        updateHUD: (ammo, maxAmmo) => updateHUD(ammo, maxAmmo, gameState.health, gameState.round)
+    });
+    
+    gameState.ammo = result.ammo;
+    gameState.lastFireTime = result.lastFireTime;
+}
+
+// ================================================
+// GAME UPDATE LOOP
+// ================================================
+
+function updateGame(delta) {
+    // Update player
+    updatePlayer(
+        delta,
+        gameState.player,
+        gameState.camera,
+        {
+            moveForward: gameState.moveForward,
+            moveBackward: gameState.moveBackward,
+            moveLeft: gameState.moveLeft,
+            moveRight: gameState.moveRight
+        },
+        PLAYER_SPEED,
+        { velocity: gameState.velocity, canJump: gameState.canJump },
+        PLAYER_HEIGHT,
+        gameState.obstacles,
+        gameState.raycaster,
+        WORLD_WIDTH,
         WORLD_DEPTH
     );
     
-    // Verify enemies were created
-    console.log('Enemies created:', testEnemies.length, '(expected: 3)');
+    // Update enemies
+    updateEnemies(
+        delta,
+        gameState.enemies,
+        gameState.player,
+        gameState.obstacles,
+        ENEMY_SPEED,
+        ENEMY_RANGE,
+        ENEMY_FIRE_RATE,
+        ENEMY_DAMAGE,
+        gameState.scene,
+        gameState.enemyBullets,
+        gameState.raycaster,
+        WORLD_WIDTH,
+        WORLD_DEPTH
+    );
     
-    if (testEnemies.length > 0) {
-        const firstEnemy = testEnemies[0];
-        console.log('First enemy health:', firstEnemy.health, '(expected: 100)');
-        console.log('First enemy lastShot:', firstEnemy.lastShot, '(expected: 0)');
-        console.log('First enemy position Y:', firstEnemy.position.y, '(expected: 1)');
-        console.log('First enemy in scene:', scene.children.includes(firstEnemy));
-        
-        // Verify spawn distance from player
-        const distanceToPlayer = firstEnemy.position.distanceTo(player.position);
-        console.log('Enemy distance from player:', distanceToPlayer, '(should be >= 10)');
-    }
+    // Update bullets
+    updateBullets(
+        gameState.bullets,
+        gameState.enemyBullets,
+        gameState.enemies,
+        gameState.player,
+        gameState.obstacles,
+        gameState.scene,
+        gameState.raycaster,
+        (ammo, maxAmmo, health, round) => {
+            if (health !== null) gameState.health = health;
+            updateHUD(gameState.ammo, gameState.maxAmmo, gameState.health, gameState.round);
+        },
+        () => {
+            // Enemy killed - check for round complete
+            if (gameState.enemies.length === 0) {
+                nextRound();
+            }
+        },
+        (damage) => {
+            // Player hit
+            gameState.health -= damage;
+            updateHUD(gameState.ammo, gameState.maxAmmo, gameState.health, gameState.round);
+            
+            if (gameState.health <= 0) {
+                gameOver();
+            }
+        },
+        () => gameOver()
+    );
     
-    // Test clearEnemies
-    clearEnemies(scene, testEnemies);
-    console.log('Enemies cleared - remaining in scene:', 
-        scene.children.filter(child => child.geometry && child.geometry.type === 'ConeGeometry').length);
-    
-    console.log('Enemy factory test complete');
+    // Update minimap
+    updateMinimap(gameState.player, gameState.camera, gameState.enemies, WORLD_WIDTH, WORLD_DEPTH);
 }
 
 // ================================================
-// TEST: HUD Module Integration
+// START THE GAME
 // ================================================
 
-function testHUD() {
-    console.log('Testing HUD module...');
-    
-    // Old HUD update (from neon_arena.html)
-    function oldUpdateHUD() {
-        document.getElementById('ammo').textContent = `AMMO: ${ammo}/${maxAmmo}`;
-        document.getElementById('health').textContent = `HEALTH: ${Math.max(0, Math.floor(health))}`;
-        document.getElementById('round').textContent = `ROUND: ${round}`;
-    }
-    
-    // Test: Update HUD using both methods
-    oldUpdateHUD();
-    updateHUD(ammo, maxAmmo, health, round);
-    
-    console.log('HUD test complete - both methods should produce identical results');
-}
-
-// ================================================
-// TEST: Minimap Module Integration
-// ================================================
-
-function testMinimap() {
-    console.log('Testing Minimap module...');
-    
-    // Test initMinimap
-    initMinimap();
-    console.log('Minimap initialized');
-    
-    // Test updateMinimap (will fail gracefully if player/camera not ready)
-    if (player && camera) {
-        updateMinimap(player, camera, enemies, WORLD_WIDTH, WORLD_DEPTH);
-        console.log('Minimap updated with player and enemies');
-    } else {
-        console.log('Player/camera not ready - skipping minimap update test');
-    }
-    
-    console.log('Minimap test complete');
-}
-
-// ================================================
-// SCENE SETUP FOR TESTING
-// ================================================
-
-function setupTestScene() {
-    console.log('Setting up test scene...');
-    
-    // Create scene
-    scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x111122);
-    scene.fog = new THREE.Fog(0x111122, 1, 100);
-    
-    // Create camera
-    camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-    camera.position.y = PLAYER_HEIGHT;
-    
-    // Create renderer
-    renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.shadowMap.enabled = true;
-    
-    // Create clock
-    clock = new THREE.Clock();
-    
-    // Create raycaster
-    raycaster = new THREE.Raycaster();
-    mouse = new THREE.Vector2();
-    
-    console.log('Test scene setup complete');
-}
-
-// ================================================
-// RUN ALL TESTS
-// ================================================
-
-function runTests() {
-    console.log('=== RUNNING PHASE 3 INTEGRATION TESTS ===');
-    
-    // Setup scene first
-    setupTestScene();
-    
-    // Test Phase 1 & 2 modules
-    testHUD();
-    testMinimap();
-    
-    // Test Phase 3 entity factories
-    testPlayerFactory();
-    obstacles = testEnvironmentFactory() || [];
-    
-    // Create a player for enemy testing
-    player = createPlayer(scene, PLAYER_HEIGHT);
-    
-    testEnemyFactory();
-    
-    console.log('=== ALL TESTS COMPLETE ===');
-    console.log('Phase 3 entity factories are working correctly');
-    console.log('Ready to proceed to Phase 4: Core Systems');
-}
-
-// Run tests when DOM is ready
-document.addEventListener('DOMContentLoaded', () => {
-    console.log('DOM loaded - running Phase 3 integration tests');
-    runTests();
-});
+// Initialize when DOM is ready
+document.addEventListener('DOMContentLoaded', init);
