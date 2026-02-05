@@ -36,3 +36,7 @@ key.txt
 .idea/
 *.swp
 *.swo
+
+# Ignore MONK.md files.
+MONK.md
+src/MONK.md
