@@ -253,6 +253,11 @@ export function updateBullets(bullets, enemyBullets, enemies, player, obstacles,
         bullet.distance += bullet.speed;
         bullet.mesh.position.copy(bullet.position);
         
+        // DEBUG: Log bullet position occasionally
+        if (i === 0 && Math.random() < 0.05) {
+            console.log('Bullet pos:', bullet.position.x.toFixed(2), bullet.position.y.toFixed(2), bullet.position.z.toFixed(2));
+        }
+        
         // Check if bullet hit an enemy
         let hitEnemy = false;
         for (let j = 0; j < enemies.length; j++) {
@@ -262,17 +267,29 @@ export function updateBullets(bullets, enemyBullets, enemies, player, obstacles,
             const enemyCenter = enemy.position.clone();
             enemyCenter.y += 1.0; // Adjust to center of droid
             
-            if (bullet.position.distanceTo(enemyCenter) < 1.2) {
+            const distance = bullet.position.distanceTo(enemyCenter);
+            
+            // DEBUG: Log distance check for first enemy
+            if (j === 0 && i === 0 && Math.random() < 0.1) {
+                console.log('Distance to droid:', distance.toFixed(2), 'Enemy health:', enemy.health);
+            }
+            
+            if (distance < 1.2) {
+                console.log('HIT! Bullet hit droid at distance:', distance.toFixed(2));
                 enemy.health -= bullet.damage;
+                console.log('Droid health after hit:', enemy.health);
                 
                 if (enemy.health <= 0) {
+                    console.log('Droid destroyed!');
                     scene.remove(enemy);
                     enemies.splice(j, 1);
                     onEnemyKilled();
                 }
                 
                 hitEnemy = true;
+                hitEnemy = true;
                 break;
+            }
         }
         
         // Check if bullet hit a wall
@@ -292,10 +309,9 @@ export function updateBullets(bullets, enemyBullets, enemies, player, obstacles,
             scene.remove(bullet.mesh);
             bullets.splice(i, 1);
         }
-            bullets.splice(i, 1);
-        }
     }
     
+    // Update enemy bullets
     // Update enemy bullets
     for (let i = enemyBullets.length - 1; i >= 0; i--) {
         const bullet = enemyBullets[i];
