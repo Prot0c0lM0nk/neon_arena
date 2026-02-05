@@ -169,8 +169,8 @@ export function updateEnemies(delta, enemies, player, obstacles, enemySpeed, ene
         enemy.position.x = Math.max(-worldWidth/2 + 1, Math.min(worldWidth/2 - 1, enemy.position.x));
         enemy.position.z = Math.max(-worldDepth/2 + 1, Math.min(worldDepth/2 - 1, enemy.position.z));
         
-        // Face player
-        enemy.lookAt(player.position);
+        // Face player - droids are Groups, so lookAt works on the whole droid
+        enemy.lookAt(player.position.x, enemy.position.y, player.position.z);
         
         // Enemy shooting
         if (distance < enemyRange) {
@@ -257,7 +257,12 @@ export function updateBullets(bullets, enemyBullets, enemies, player, obstacles,
         let hitEnemy = false;
         for (let j = 0; j < enemies.length; j++) {
             const enemy = enemies[j];
-            if (bullet.position.distanceTo(enemy.position) < 1.0) {
+            // Droids are Groups, so check distance to the group position
+            // The droid's center is at torso height (around Y=1.0)
+            const enemyCenter = enemy.position.clone();
+            enemyCenter.y += 1.0; // Adjust to center of droid
+            
+            if (bullet.position.distanceTo(enemyCenter) < 1.2) {
                 enemy.health -= bullet.damage;
                 
                 if (enemy.health <= 0) {
@@ -268,7 +273,6 @@ export function updateBullets(bullets, enemyBullets, enemies, player, obstacles,
                 
                 hitEnemy = true;
                 break;
-            }
         }
         
         // Check if bullet hit a wall
@@ -286,6 +290,8 @@ export function updateBullets(bullets, enemyBullets, enemies, player, obstacles,
         
         if (bullet.distance > bullet.range || hitEnemy || hitWall) {
             scene.remove(bullet.mesh);
+            bullets.splice(i, 1);
+        }
             bullets.splice(i, 1);
         }
     }

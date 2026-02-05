@@ -32,7 +32,12 @@ import { onMouseMove, onMouseClick, onKeyDown, onKeyUp } from './utils/input.js'
 // ================================================
 import { createPlayer } from './entities/player.js';
 import { createEnvironment } from './entities/world.js';
-import { createEnemies, clearEnemies } from './entities/enemy.js';
+import { createDroids, clearDroids } from './entities/droid.js';
+
+// ================================================
+// IMPORT EFFECTS
+// ================================================
+import { initVisor, onPlayerHit, resetVisor, updateVisor } from './effects/visor.js';
 
 // ================================================
 // IMPORT CORE SYSTEMS
@@ -40,7 +45,6 @@ import { createEnemies, clearEnemies } from './entities/enemy.js';
 import { setupScene, createAnimationLoop, handleResize } from './core/engine.js';
 import { startGame as startGameLogic, gameOver as gameOverLogic, nextRound as nextRoundLogic, fireWeapon as fireWeaponLogic, reloadWeapon } from './core/game.js';
 import { updatePlayer, updateEnemies, updateBullets } from './core/update.js';
-
 // ================================================
 // GAME STATE
 // ================================================
@@ -113,6 +117,9 @@ function init() {
     
     // Initialize minimap
     initMinimap();
+    
+    // Initialize visor effects
+    initVisor();
     
     // Handle window resize
     window.addEventListener('resize', () => handleResize(gameState.camera, gameState.renderer), false);
@@ -234,15 +241,17 @@ function startGame() {
     gameState.enemiesInRound = 5;
     gameState.gameStarted = true;
     
-    // Clear any existing enemies
-    clearEnemies(gameState.scene, gameState.enemies);
+    // Clear any existing enemies and reset visor
+    clearDroids(gameState.scene, gameState.enemies);
     gameState.enemies = [];
+    resetVisor();
     
     // Spawn first round enemies
     spawnEnemies(gameState.enemiesInRound);
     
-    // Update HUD
+    // Update HUD and visor
     updateHUD(gameState.ammo, gameState.maxAmmo, gameState.health, gameState.round);
+    updateVisor(gameState.health);
     
     // Lock pointer
     const element = document.body;
@@ -280,8 +289,9 @@ function gameOver() {
             gameState.camera.position.y = PLAYER_HEIGHT;
             
             // Clear enemies
-            clearEnemies(gameState.scene, gameState.enemies);
+            clearDroids(gameState.scene, gameState.enemies);
             gameState.enemies = [];
+            resetVisor();
         }, 2000);
     }, 2000);
 }
@@ -295,7 +305,7 @@ function nextRound() {
 }
 
 function spawnEnemies(count) {
-    const newEnemies = createEnemies(
+    const newDroids = createDroids(
         gameState.scene,
         count,
         ENEMY_COLORS,
@@ -304,7 +314,7 @@ function spawnEnemies(count) {
         WORLD_WIDTH,
         WORLD_DEPTH
     );
-    gameState.enemies.push(...newEnemies);
+    gameState.enemies.push(...newDroids);
 }
 
 // ================================================
@@ -392,6 +402,7 @@ function updateGame(delta) {
             // Player hit
             gameState.health -= damage;
             updateHUD(gameState.ammo, gameState.maxAmmo, gameState.health, gameState.round);
+            onPlayerHit(damage, gameState.health);
             
             if (gameState.health <= 0) {
                 gameOver();
