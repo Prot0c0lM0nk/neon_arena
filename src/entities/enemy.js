@@ -80,13 +80,15 @@ export function createEnemies(scene, count, enemyColors, player, obstacles, worl
             
             positionFound = true;  // Valid position found
         }
-        
         // Initialize enemy state
+        enemy.id = i;              // Unique ID for tracking
         enemy.health = 100;        // Full health
         enemy.lastShot = 0;        // Timestamp of last shot (0 = never)
         enemy.castShadow = true;   // Cast shadows
+        enemy.name = `Enemy-${i}`; // Name for debugging
         scene.add(enemy);
         enemies.push(enemy);
+        console.log(`[Spawn] Enemy-${i} spawned at (${enemy.position.x.toFixed(1)}, ${enemy.position.z.toFixed(1)})`);
     }
     
     return enemies;

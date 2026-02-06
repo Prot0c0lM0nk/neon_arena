@@ -17,6 +17,19 @@
  * INVARIANT: Droids cast shadows for depth perception
  */
 
+import { log, CATEGORIES, LEVELS } from '../utils/logger.js';
+
+/**
+ * Creates a blocky droid enemy
+ * @param {THREE.Scene} scene - The Three.js scene
+ * @param {number} color - Hex color for droid body
+ * @param {THREE.Object3D} player - Player for spawn distance checking
+ * @param {Array} obstacles - Obstacles to avoid
+ * @param {number} worldWidth - Arena width
+ * @param {number} worldDepth - Arena depth
+ * @returns {THREE.Group} The droid group object
+ */
+
 /**
  * Creates a blocky droid enemy
  * @param {THREE.Scene} scene - The Three.js scene
@@ -204,6 +217,7 @@ export function createDroid(scene, color, player, obstacles, worldWidth, worldDe
     return droid;
 }
 
+
 /**
  * Creates multiple droid enemies
  * @param {THREE.Scene} scene - The Three.js scene
@@ -221,7 +235,16 @@ export function createDroids(scene, count, colors, player, obstacles, worldWidth
     for (let i = 0; i < count; i++) {
         const color = colors[i % colors.length];
         const droid = createDroid(scene, color, player, obstacles, worldWidth, worldDepth);
+        droid.userData.id = i;
+        droid.userData.name = `Droid-${i}`;
+        droid.name = `Droid-${i}`;  // Also set Three.js name property
         droids.push(droid);
+        
+        log(CATEGORIES.SPAWN, LEVELS.INFO, `${droid.name} spawned`, {
+            id: i,
+            x: droid.position.x.toFixed(1),
+            z: droid.position.z.toFixed(1)
+        });
     }
     
     return droids;

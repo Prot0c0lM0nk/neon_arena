@@ -9,6 +9,11 @@
  * INVARIANT: Collision detection runs before position is finalized
  */
 
+import { log, CATEGORIES, LEVELS } from '../utils/logger.js';
+
+/**
+ * Updates player position and handles movement
+
 /**
  * Updates player position and handles movement
  * @param {number} delta - Time delta from clock
@@ -131,7 +136,12 @@ export function updateEnemies(delta, enemies, player, obstacles, enemySpeed, ene
         }
         
         // Check collision with obstacles
+        // NOTE: Droids are Groups with origin at Y=0, but body is at Y=1.0+
+        // We need to cast rays from torso height, not ground level
         const collisionDistance = 1.5;
+        const rayOrigin = enemy.position.clone();
+        rayOrigin.y += 1.0; // Cast from torso height (droid body center)
+        
         const directions = [
             new THREE.Vector3(1, 0, 0),
             new THREE.Vector3(-1, 0, 0),
@@ -142,7 +152,7 @@ export function updateEnemies(delta, enemies, player, obstacles, enemySpeed, ene
         let collisionDetected = false;
         
         for (const dir of directions) {
-            raycaster.set(enemy.position, dir);
+            raycaster.set(rayOrigin, dir);
             const intersects = raycaster.intersectObjects(obstacles);
             
             if (intersects.length > 0 && intersects[0].distance < collisionDistance) {
@@ -151,10 +161,14 @@ export function updateEnemies(delta, enemies, player, obstacles, enemySpeed, ene
             }
         }
         
-        // Fallback distance check
+        // Fallback distance check (check distance to obstacle center)
         if (!collisionDetected) {
             for (const obstacle of obstacles) {
-                if (enemy.position.distanceTo(obstacle.position) < 2.0) {
+                // Check horizontal distance only (ignore Y difference)
+                const dx = enemy.position.x - obstacle.position.x;
+                const dz = enemy.position.z - obstacle.position.z;
+                const horizontalDistance = Math.sqrt(dx * dx + dz * dz);
+                if (horizontalDistance < 2.0) {
                     collisionDetected = true;
                     break;
                 }
@@ -254,8 +268,13 @@ export function updateBullets(bullets, enemyBullets, enemies, player, obstacles,
         bullet.mesh.position.copy(bullet.position);
         
         // DEBUG: Log bullet position occasionally
+        // DEBUG: Log bullet position occasionally
         if (i === 0 && Math.random() < 0.05) {
-            console.log('Bullet pos:', bullet.position.x.toFixed(2), bullet.position.y.toFixed(2), bullet.position.z.toFixed(2));
+            log(CATEGORIES.BULLET, LEVELS.DEBUG, 'Bullet position', {
+                x: bullet.position.x.toFixed(2),
+                y: bullet.position.y.toFixed(2),
+                z: bullet.position.z.toFixed(2)
+            });
         }
         
         // Check if bullet hit an enemy
@@ -269,24 +288,32 @@ export function updateBullets(bullets, enemyBullets, enemies, player, obstacles,
             
             const distance = bullet.position.distanceTo(enemyCenter);
             
-            // DEBUG: Log distance check for first enemy
-            if (j === 0 && i === 0 && Math.random() < 0.1) {
-                console.log('Distance to droid:', distance.toFixed(2), 'Enemy health:', enemy.health);
+            // DEBUG: Log distance check for each enemy occasionally
+            if (i === 0 && Math.random() < 0.05) {
+                log(CATEGORIES.BULLET, LEVELS.DEBUG, `Distance to ${enemy.name}`, {
+                    distance: distance.toFixed(2),
+                    health: enemy.health
+                });
             }
             
             if (distance < 1.2) {
-                console.log('HIT! Bullet hit droid at distance:', distance.toFixed(2));
+                log(CATEGORIES.COMBAT, LEVELS.INFO, `${enemy.name} hit`, {
+                    distance: distance.toFixed(2),
+                    damage: bullet.damage
+                });
                 enemy.health -= bullet.damage;
-                console.log('Droid health after hit:', enemy.health);
+                log(CATEGORIES.COMBAT, LEVELS.INFO, `${enemy.name} health updated`, {
+                    health: enemy.health,
+                    maxHealth: 100
+                });
                 
                 if (enemy.health <= 0) {
-                    console.log('Droid destroyed!');
+                    log(CATEGORIES.COMBAT, LEVELS.INFO, `${enemy.name} destroyed`);
                     scene.remove(enemy);
                     enemies.splice(j, 1);
                     onEnemyKilled();
                 }
                 
-                hitEnemy = true;
                 hitEnemy = true;
                 break;
             }
@@ -311,7 +338,6 @@ export function updateBullets(bullets, enemyBullets, enemies, player, obstacles,
         }
     }
     
-    // Update enemy bullets
     // Update enemy bullets
     for (let i = enemyBullets.length - 1; i >= 0; i--) {
         const bullet = enemyBullets[i];
