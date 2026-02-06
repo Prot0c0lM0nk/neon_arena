@@ -88,7 +88,7 @@ export function createEnemies(scene, count, enemyColors, player, obstacles, worl
         enemy.name = `Enemy-${i}`; // Name for debugging
         scene.add(enemy);
         enemies.push(enemy);
-        console.log(`[Spawn] Enemy-${i} spawned at (${enemy.position.x.toFixed(1)}, ${enemy.position.z.toFixed(1)})`);
+        // Note: This file is deprecated, using droid.js instead
     }
     
     return enemies;

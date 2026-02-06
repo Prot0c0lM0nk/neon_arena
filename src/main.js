@@ -45,6 +45,11 @@ import { initVisor, onPlayerHit, resetVisor, updateVisor } from './effects/visor
 import { setupScene, createAnimationLoop, handleResize } from './core/engine.js';
 import { startGame as startGameLogic, gameOver as gameOverLogic, nextRound as nextRoundLogic, fireWeapon as fireWeaponLogic, reloadWeapon } from './core/game.js';
 import { updatePlayer, updateEnemies, updateBullets } from './core/update.js';
+import { log, CATEGORIES, LEVELS } from './utils/logger.js';
+
+// ================================================
+// GAME STATE
+// ================================================
 // ================================================
 // GAME STATE
 // ================================================
@@ -91,7 +96,7 @@ const gameState = {
 // ================================================
 
 function init() {
-    console.log('=== Neon Arena FPS - Modular Version ===');
+    log(CATEGORIES.SYSTEM, LEVELS.INFO, '=== Neon Arena FPS - Modular Version ===');
     
     // Set up event listeners
     setupEventListeners();
@@ -136,7 +141,7 @@ function init() {
     
     animate();
     
-    console.log('Game initialized successfully');
+    log(CATEGORIES.SYSTEM, LEVELS.INFO, 'Game initialized successfully');
 }
 
 // ================================================
@@ -226,7 +231,7 @@ function onKeyUpHandler(event) {
 // ================================================
 
 function startGame() {
-    console.log('Starting game with weapon:', gameState.weaponType);
+    log(CATEGORIES.STATE, LEVELS.INFO, 'Starting game', { weapon: gameState.weaponType });
     
     // Hide start screen, show game
     document.getElementById('startScreen').style.display = 'none';

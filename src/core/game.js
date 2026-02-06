@@ -8,7 +8,13 @@
  * INVARIANT: Game state changes are atomic (no partial updates)
  * INVARIANT: UI updates always follow state changes
  * INVARIANT: Pointer lock state matches game state
+ * INVARIANT: Pointer lock state matches game state
  */
+
+import { log, CATEGORIES, LEVELS } from '../utils/logger.js';
+
+/**
+ * Starts a new game session
 
 /**
  * Starts a new game session
@@ -21,7 +27,7 @@
  * @returns {Object} Initial game state
  */
 export function startGame({ weaponType, weapons, updateHUD, createEnemies, controls }) {
-    console.log('Starting game with weapon:', weaponType);
+    log(CATEGORIES.STATE, LEVELS.INFO, 'Starting game', { weapon: weaponType });
     
     // Get weapon configuration
     const weapon = weapons[weaponType];
