@@ -199,12 +199,30 @@ export function createDroid(scene, color, player, obstacles, worldWidth, worldDe
         
         // Check distance from player
         const distanceToPlayer = droid.position.distanceTo(player.position);
-        if (distanceToPlayer < 10) continue;
+        if (distanceToPlayer < 10) {
+            log(CATEGORIES.SPAWN, LEVELS.DEBUG, 'Spawn rejected - too close to player', {
+                x: spawnX.toFixed(1),
+                z: spawnZ.toFixed(1),
+                distanceToPlayer: distanceToPlayer.toFixed(1),
+                minRequired: 10
+            });
+            continue;
+        }
         
         // Check distance from obstacles
-        if (obstacles.some(obs => droid.position.distanceTo(obs.position) < 3.0)) continue;
+        const tooCloseObstacle = obstacles.find(obs => droid.position.distanceTo(obs.position) < 3.0);
+        if (tooCloseObstacle) {
+            log(CATEGORIES.SPAWN, LEVELS.DEBUG, 'Spawn rejected - too close to obstacle', {
+                x: spawnX.toFixed(1),
+                z: spawnZ.toFixed(1),
+                obstacleDistance: droid.position.distanceTo(tooCloseObstacle.position).toFixed(1),
+                minRequired: 3
+            });
+            continue;
+            continue;
+        }
         
-        positionFound = true;
+        positionFound = true;  // Valid position found
     }
     
     // ========== GAME PROPERTIES ==========

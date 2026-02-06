@@ -321,6 +321,7 @@ export function updateBullets(bullets, enemyBullets, enemies, player, obstacles,
         
         // Check if bullet hit a wall
         let hitWall = false;
+        let wallHitInfo = null;
         raycaster.set(oldPos, bullet.direction);
         const intersects = raycaster.intersectObjects(obstacles);
         
@@ -329,7 +330,42 @@ export function updateBullets(bullets, enemyBullets, enemies, player, obstacles,
             const distanceToIntersection = oldPos.distanceTo(intersectionPoint);
             if (distanceToIntersection <= bullet.speed) {
                 hitWall = true;
+                wallHitInfo = {
+                    distance: distanceToIntersection.toFixed(2),
+                    pos: {
+                        x: intersectionPoint.x.toFixed(1),
+                        y: intersectionPoint.y.toFixed(1),
+                        z: intersectionPoint.z.toFixed(1)
+                    }
+                };
             }
+        }
+        
+        // Log bullet lifecycle
+        if (hitEnemy) {
+            log(CATEGORIES.BULLET, LEVELS.INFO, 'Bullet hit enemy', {
+                totalDistance: bullet.distance.toFixed(2),
+                finalPos: {
+                    x: bullet.position.x.toFixed(1),
+                    y: bullet.position.y.toFixed(1),
+                    z: bullet.position.z.toFixed(1)
+                }
+            });
+        } else if (hitWall) {
+            log(CATEGORIES.BULLET, LEVELS.INFO, 'Bullet hit wall', {
+                totalDistance: bullet.distance.toFixed(2),
+                wallDistance: wallHitInfo.distance,
+                impactPos: wallHitInfo.pos
+            });
+        } else if (bullet.distance > bullet.range) {
+            log(CATEGORIES.BULLET, LEVELS.INFO, 'Bullet max range reached', {
+                maxRange: bullet.range,
+                finalPos: {
+                    x: bullet.position.x.toFixed(1),
+                    y: bullet.position.y.toFixed(1),
+                    z: bullet.position.z.toFixed(1)
+                }
+            });
         }
         
         if (bullet.distance > bullet.range || hitEnemy || hitWall) {
