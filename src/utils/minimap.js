@@ -1,98 +1,116 @@
 /**
  * Minimap rendering utility
- * Creates a 2D overhead view of the game world showing player and enemy positions
- * 
- * INTENT: Provide tactical awareness through overhead view
- * INTENT: Separate canvas drawing logic from game state
- * 
- * INVARIANT: #minimapCanvas element must exist in DOM
- * INVARIANT: Canvas size is fixed at 200x200 pixels
- * INVARIANT: World coordinates are normalized to canvas coordinates
- * 
- * DEPENDENCIES: Uses global DOM element: #minimapCanvas
- * DEPENDENCIES: Called every frame by animate() function
- * DEPENDENCIES: References player.position, camera.quaternion, enemies array
- * DEPENDENCIES: References worldWidth, worldDepth for coordinate scaling
- * 
- * COORDINATE TRANSFORMATION:
- *   World coordinates: (-worldWidth/2, -worldDepth/2) to (worldWidth/2, worldDepth/2)
- *   Canvas coordinates: (0, 0) to (200, 200)
- *   Scale factor: 200 / max(worldWidth, worldDepth)
- * 
- * NOTE: Player direction is calculated from camera orientation
- * NOTE: Enemies are drawn as red dots, player as cyan dot with direction line
+ * Player-rotating tactical minimap with soft neon styling.
  */
 
-/**
- * Renders the minimap with current game state
- * @param {THREE.Object3D} player - Player object with position property
- * @param {THREE.PerspectiveCamera} camera - Camera for player direction calculation
- * @param {Array} enemies - Array of enemy objects with position property
- * @param {number} worldWidth - Width of the game world in meters
- * @param {number} worldDepth - Depth of the game world in meters
- */
-export function updateMinimap(player, camera, enemies, worldWidth, worldDepth) {
-    const canvas = document.getElementById('minimapCanvas');
-    const ctx = canvas.getContext('2d');
-    const size = 200;  // Fixed minimap size
-    const scale = size / Math.max(worldWidth, worldDepth);
-    
-    // Set canvas size (ensure it matches container)
-    canvas.width = size;
-    canvas.height = size;
-    
-    // Clear canvas with semi-transparent background
-    ctx.clearRect(0, 0, size, size);
-    
-    // Draw background
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+function drawBackground(ctx, size) {
+    const gradient = ctx.createLinearGradient(0, 0, size, size);
+    gradient.addColorStop(0, 'rgba(4, 12, 26, 0.95)');
+    gradient.addColorStop(1, 'rgba(2, 6, 14, 0.96)');
+
+    ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, size, size);
-    
-    // Draw player position
-    const playerX = (player.position.x + worldWidth/2) * scale;
-    const playerY = (player.position.z + worldDepth/2) * scale;
-    ctx.fillStyle = '#00ffea';  // Cyan color
-    ctx.beginPath();
-    ctx.arc(playerX, playerY, 5, 0, Math.PI * 2);
-    ctx.fill();
-    
-    // Draw player direction line
-    const direction = new THREE.Vector3(0, 0, -1);
-    direction.applyQuaternion(camera.quaternion);
-    ctx.strokeStyle = '#00ffea';
-    ctx.beginPath();
-    ctx.moveTo(playerX, playerY);
-    ctx.lineTo(
-        playerX + direction.x * 10,
-        playerY + direction.z * 10
-    );
-    ctx.stroke();
-    
-    // Draw enemy positions
-    enemies.forEach(enemy => {
-        const enemyX = (enemy.position.x + worldWidth/2) * scale;
-        const enemyY = (enemy.position.z + worldDepth/2) * scale;
-        ctx.fillStyle = '#ff0000';  // Red color
+
+    ctx.strokeStyle = 'rgba(43, 101, 148, 0.22)';
+    ctx.lineWidth = 1;
+
+    for (let x = 0; x <= size; x += 20) {
         ctx.beginPath();
-        ctx.arc(enemyX, enemyY, 3, 0, Math.PI * 2);
-        ctx.fill();
-    });
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, size);
+        ctx.stroke();
+    }
+
+    for (let y = 0; y <= size; y += 20) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(size, y);
+        ctx.stroke();
+    }
+
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.03)';
+    for (let y = 0; y < size; y += 6) {
+        ctx.fillRect(0, y, size, 1);
+    }
 }
 
-/**
- * Initializes the minimap canvas
- * Ensures canvas has correct dimensions and context
- */
+function drawPlayerWedge(ctx, x, y, camera) {
+    const direction = new THREE.Vector3(0, 0, -1);
+    direction.applyQuaternion(camera.quaternion);
+
+    const angle = Math.atan2(direction.x, direction.z);
+    const tipDistance = 13;
+    const wingDistance = 7;
+
+    const tipX = x + Math.sin(angle) * tipDistance;
+    const tipY = y + Math.cos(angle) * tipDistance;
+
+    const leftAngle = angle + Math.PI * 0.78;
+    const rightAngle = angle - Math.PI * 0.78;
+
+    const leftX = x + Math.sin(leftAngle) * wingDistance;
+    const leftY = y + Math.cos(leftAngle) * wingDistance;
+    const rightX = x + Math.sin(rightAngle) * wingDistance;
+    const rightY = y + Math.cos(rightAngle) * wingDistance;
+
+    ctx.fillStyle = '#12e9e1';
+    ctx.beginPath();
+    ctx.moveTo(tipX, tipY);
+    ctx.lineTo(leftX, leftY);
+    ctx.lineTo(rightX, rightY);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.arc(x, y, 4.6, 0, Math.PI * 2);
+    ctx.fillStyle = '#16e6de';
+    ctx.fill();
+}
+
+export function updateMinimap(player, camera, enemies, worldWidth, worldDepth) {
+    const canvas = document.getElementById('minimapCanvas');
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    const size = 268;
+    const scale = size / Math.max(worldWidth, worldDepth);
+
+    canvas.width = size;
+    canvas.height = size;
+
+    drawBackground(ctx, size);
+
+    const playerX = (player.position.x + worldWidth / 2) * scale;
+    const playerY = (player.position.z + worldDepth / 2) * scale;
+
+    enemies.forEach(enemy => {
+        const enemyX = (enemy.position.x + worldWidth / 2) * scale;
+        const enemyY = (enemy.position.z + worldDepth / 2) * scale;
+
+        ctx.beginPath();
+        ctx.arc(enemyX, enemyY, 3.2, 0, Math.PI * 2);
+        ctx.fillStyle = '#ff394a';
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.arc(enemyX, enemyY, 5.2, 0, Math.PI * 2);
+        ctx.strokeStyle = 'rgba(255, 57, 74, 0.22)';
+        ctx.stroke();
+    });
+
+    drawPlayerWedge(ctx, playerX, playerY, camera);
+
+    ctx.strokeStyle = 'rgba(29, 232, 222, 0.7)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(1, 1, size - 2, size - 2);
+}
+
 export function initMinimap() {
     const canvas = document.getElementById('minimapCanvas');
+    if (!canvas) return;
+
     const ctx = canvas.getContext('2d');
-    
-    // Set initial canvas size
-    canvas.width = 200;
-    canvas.height = 200;
-    
-    // Clear and set initial background
-    ctx.clearRect(0, 0, 200, 200);
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-    ctx.fillRect(0, 0, 200, 200);
+    canvas.width = 268;
+    canvas.height = 268;
+    drawBackground(ctx, 268);
 }

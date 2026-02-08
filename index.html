@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neon Arena FPS - Tactical HUD</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/PointerLockControls.min.js"></script>
+    <style>
+        :root {
+            --hud-cyan: #1de8de;
+            --hud-green: #32f55a;
+            --hud-yellow: #f2df53;
+            --hud-blue: #2f8dff;
+            --hud-red: #ff5f5f;
+            --panel-bg: rgba(8, 12, 24, 0.62);
+            --panel-border: rgba(29, 232, 222, 0.48);
+            --panel-inner: rgba(255, 255, 255, 0.09);
+            --hud-text: rgba(235, 244, 255, 0.96);
+        }
+
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: 'Avenir Next', 'Segoe UI', sans-serif;
+            background: #04070f;
+            color: #fff;
+        }
+
+        #startScreen {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle at 28% 20%, #192743 0%, #090b16 46%, #04050a 100%);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 140;
+        }
+
+        .title {
+            font-size: 4rem;
+            margin-bottom: 0;
+            color: var(--hud-cyan);
+            text-shadow: 0 0 14px rgba(29, 232, 222, 0.84);
+            letter-spacing: 0.05em;
+        }
+
+        .weapon-selection {
+            display: flex;
+            gap: 2rem;
+            margin: 2rem 0;
+        }
+
+        .weapon-card {
+            width: 200px;
+            height: 300px;
+            background: rgba(0, 0, 0, 0.7);
+            border: 2px solid var(--hud-cyan);
+            border-radius: 10px;
+            padding: 1rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            cursor: pointer;
+            transition: all 0.26s;
+        }
+
+        .weapon-card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 0 20px rgba(29, 232, 222, 0.72);
+        }
+
+        .weapon-card h3 {
+            color: var(--hud-cyan);
+            margin: 1rem 0;
+            text-align: center;
+        }
+
+        .weapon-stats {
+            width: 100%;
+            margin-top: 1rem;
+            font-size: 0.95rem;
+        }
+
+        .stat-bar {
+            display: inline-block;
+            width: 100px;
+            height: 10px;
+            background: #333;
+            margin: 0.5rem 0;
+            position: relative;
+            border-radius: 5px;
+            overflow: hidden;
+        }
+
+        .stat-fill {
+            display: block;
+            height: 100%;
+            background: var(--hud-cyan);
+            position: absolute;
+            left: 0;
+            top: 0;
+        }
+
+        #startButton {
+            margin-bottom: 4rem;
+            padding: 1rem 1.6rem;
+            font-size: 1.1rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            color: #081420;
+            background: var(--hud-cyan);
+            border: none;
+            border-radius: 7px;
+            cursor: pointer;
+            transition: all 0.28s;
+        }
+
+        #startButton:hover {
+            background: #89fff8;
+            transform: scale(1.06);
+        }
+
+        #gameContainer {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            display: none;
+        }
+
+        .weapon-card.locked {
+            opacity: 0.55;
+            border-color: #666;
+            box-shadow: none;
+        }
+
+        .weapon-card.locked h3 {
+            color: #999;
+        }
+
+        .lock-label {
+            margin-top: 0.6rem;
+            padding: 0.2rem 0.6rem;
+            border: 1px solid #777;
+            border-radius: 6px;
+            color: #bbb;
+            font-size: 0.8rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        #hudRoot {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            z-index: 60;
+        }
+
+        #hudLeft {
+            position: absolute;
+            left: 18px;
+            bottom: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            width: min(500px, 47vw);
+        }
+
+        .hud-module {
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            box-shadow:
+                inset 0 0 0 1px rgba(255, 255, 255, 0.06),
+                0 0 24px rgba(8, 16, 36, 0.65);
+            border-radius: 4px;
+            padding: 12px 14px;
+            backdrop-filter: blur(2px);
+        }
+
+        .hud-row {
+            display: grid;
+            grid-template-columns: 86px minmax(100px, 1fr);
+            align-items: center;
+            gap: 12px;
+            margin: 5px 0;
+        }
+
+        .hud-label {
+            color: rgba(255, 255, 255, 0.82);
+            font-size: 0.84rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .hud-bar {
+            position: relative;
+            height: 30px;
+            border: 1px solid rgba(255, 255, 255, 0.22);
+            background: rgba(0, 0, 0, 0.45);
+            overflow: hidden;
+        }
+
+        .hud-bar-fill {
+            position: absolute;
+            left: 0;
+            top: 0;
+            height: 100%;
+            width: 0%;
+            transition: width 120ms linear;
+        }
+
+        .hud-bar-fill.health { background: linear-gradient(90deg, #14c63f, var(--hud-green)); }
+        .hud-bar-fill.light { background: linear-gradient(90deg, #d8c219, var(--hud-yellow)); }
+        .hud-bar-fill.sound { background: linear-gradient(90deg, #2672e5, var(--hud-blue)); }
+        .hud-bar-fill.ammo { background: linear-gradient(90deg, #22c851, #3dff8a); }
+
+        .hud-bar-track {
+            position: absolute;
+            inset: 0;
+            border: 1px solid var(--panel-inner);
+            pointer-events: none;
+        }
+
+        .hud-value {
+            position: absolute;
+            right: 8px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: rgba(255, 255, 255, 0.9);
+            font-size: 0.77rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            text-shadow: 0 0 6px rgba(0, 0, 0, 0.75);
+        }
+
+        .hud-meta {
+            margin-top: 8px;
+            display: flex;
+            justify-content: space-between;
+            color: var(--hud-text);
+            font-size: 0.9rem;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+        }
+
+        #hudObjective {
+            position: absolute;
+            left: 18px;
+            bottom: 196px;
+            min-width: 280px;
+            max-width: min(500px, 47vw);
+            font-size: 0.77rem;
+            color: rgba(255, 255, 255, 0.88);
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            padding: 0.45rem 0.75rem;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            background: rgba(5, 8, 16, 0.56);
+            display: none;
+        }
+
+        #minimap {
+            position: absolute;
+            top: 24px;
+            right: 24px;
+            width: 268px;
+            height: 268px;
+            background: linear-gradient(160deg, rgba(3, 10, 23, 0.9), rgba(3, 5, 12, 0.88));
+            border: 1px solid rgba(29, 232, 222, 0.65);
+            box-shadow:
+                inset 0 0 0 1px rgba(255, 255, 255, 0.08),
+                inset 0 0 26px rgba(29, 232, 222, 0.09),
+                0 0 32px rgba(5, 11, 28, 0.8);
+            z-index: 70;
+            overflow: hidden;
+        }
+
+        #minimap::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            background: repeating-linear-gradient(
+                to bottom,
+                rgba(255, 255, 255, 0.03),
+                rgba(255, 255, 255, 0.03) 1px,
+                transparent 2px,
+                transparent 6px
+            );
+            mix-blend-mode: screen;
+            opacity: 0.22;
+        }
+
+        #minimapCanvas {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            z-index: 1;
+        }
+
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 14px;
+            height: 14px;
+            transform: translate(-50%, -50%);
+            z-index: 85;
+            pointer-events: none;
+            display: none;
+            opacity: 0.95;
+        }
+
+        #crosshair::before,
+        #crosshair::after {
+            content: '';
+            position: absolute;
+            background: rgba(120, 255, 211, 0.95);
+            box-shadow: 0 0 8px rgba(48, 246, 228, 0.76);
+        }
+
+        #crosshair::before {
+            top: 6px;
+            left: 0;
+            width: 14px;
+            height: 2px;
+        }
+
+        #crosshair::after {
+            left: 6px;
+            top: 0;
+            width: 2px;
+            height: 14px;
+        }
+
+        #phaseBanner {
+            position: absolute;
+            top: 21%;
+            left: 50%;
+            transform: translateX(-50%);
+            color: var(--hud-cyan);
+            font-size: 2.8rem;
+            letter-spacing: 0.12em;
+            text-shadow: 0 0 14px rgba(29, 232, 222, 0.88);
+            z-index: 88;
+            display: none;
+            pointer-events: none;
+            text-align: center;
+        }
+
+        #intermissionTimer {
+            position: absolute;
+            top: 12px;
+            left: 50%;
+            transform: translateX(-50%);
+            min-width: 240px;
+            text-align: center;
+            padding: 0.45rem 0.9rem;
+            background: rgba(8, 11, 20, 0.72);
+            border: 1px solid rgba(29, 232, 222, 0.5);
+            border-radius: 4px;
+            color: #d8fffb;
+            font-size: 0.95rem;
+            letter-spacing: 0.08em;
+            z-index: 87;
+            display: none;
+            pointer-events: none;
+        }
+
+        #pickupNotice {
+            position: absolute;
+            bottom: 136px;
+            left: 50%;
+            transform: translateX(-50%);
+            min-width: 320px;
+            max-width: 62vw;
+            text-align: center;
+            padding: 0.5rem 0.9rem;
+            background: rgba(8, 10, 16, 0.76);
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            border-radius: 4px;
+            color: #fff;
+            font-size: 0.88rem;
+            letter-spacing: 0.08em;
+            z-index: 89;
+            display: none;
+            pointer-events: none;
+            text-transform: uppercase;
+        }
+
+        #viewmodelSprite {
+            position: absolute;
+            right: 15%;
+            bottom: 6%;
+            width: 240px;
+            height: 160px;
+            z-index: 76;
+            pointer-events: none;
+            display: none;
+            transform: translate3d(0, 0, 0) rotate(0deg);
+            transform-origin: 70% 85%;
+            opacity: 0.94;
+            filter: drop-shadow(0 10px 14px rgba(0, 0, 0, 0.66));
+        }
+
+        .vm-part {
+            position: absolute;
+            background: linear-gradient(145deg, #687086, #242a36);
+            border: 1px solid rgba(0, 0, 0, 0.55);
+        }
+
+        .vm-main {
+            width: 138px;
+            height: 50px;
+            right: 28px;
+            bottom: 18px;
+            clip-path: polygon(12% 0, 100% 0, 86% 100%, 0 100%);
+        }
+
+        .vm-top {
+            width: 85px;
+            height: 14px;
+            right: 82px;
+            bottom: 66px;
+            background: linear-gradient(145deg, #8f96a8, #394150);
+        }
+
+        .vm-front {
+            width: 34px;
+            height: 22px;
+            right: 154px;
+            bottom: 44px;
+            background: linear-gradient(145deg, #99a3ba, #454e62);
+        }
+
+        #viewmodelSprite.weapon-shotgun .vm-main {
+            width: 160px;
+            height: 42px;
+            right: 18px;
+            bottom: 24px;
+            clip-path: polygon(2% 0, 100% 0, 96% 100%, 8% 100%);
+        }
+
+        #viewmodelSprite.weapon-shotgun .vm-top {
+            width: 116px;
+            right: 66px;
+            bottom: 64px;
+        }
+
+        #viewmodelSprite.weapon-shotgun .vm-front {
+            width: 44px;
+            right: 170px;
+            bottom: 42px;
+        }
+
+        #viewmodelSprite.weapon-sniper .vm-main {
+            width: 178px;
+            height: 30px;
+            right: 14px;
+            bottom: 30px;
+            clip-path: polygon(0 0, 100% 0, 92% 100%, 4% 100%);
+        }
+
+        #viewmodelSprite.weapon-sniper .vm-top {
+            width: 120px;
+            height: 10px;
+            right: 84px;
+            bottom: 66px;
+        }
+
+        #viewmodelSprite.weapon-sniper .vm-front {
+            width: 56px;
+            height: 16px;
+            right: 186px;
+            bottom: 40px;
+        }
+
+        #tacticalGlyph {
+            position: absolute;
+            right: 34px;
+            bottom: 28px;
+            width: 34px;
+            height: 34px;
+            z-index: 74;
+            opacity: 0.7;
+            pointer-events: none;
+        }
+
+        #tacticalGlyph::before,
+        #tacticalGlyph::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%);
+            background: rgba(232, 240, 255, 0.85);
+        }
+
+        #tacticalGlyph::after {
+            transform: scale(0.54);
+            background: rgba(8, 12, 24, 0.82);
+        }
+
+        #gameOver {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 3rem;
+            color: #ff0000;
+            text-shadow: 0 0 10px #ff0000;
+            display: none;
+            z-index: 200;
+        }
+
+        #blackScreen {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background: #000;
+            z-index: 300;
+            display: none;
+        }
+
+        @media (max-width: 768px) {
+            .weapon-selection {
+                flex-direction: column;
+                gap: 1rem;
+            }
+
+            .weapon-card {
+                width: 240px;
+                height: auto;
+            }
+
+            #hudLeft {
+                width: min(420px, 92vw);
+                left: 12px;
+                bottom: 14px;
+            }
+
+            .hud-row {
+                grid-template-columns: 74px 1fr;
+                gap: 9px;
+            }
+
+            #hudObjective {
+                left: 12px;
+                bottom: 204px;
+                max-width: 92vw;
+                min-width: 0;
+                font-size: 0.72rem;
+            }
+
+            #phaseBanner {
+                font-size: 2rem;
+                top: 18%;
+            }
+
+            #pickupNotice {
+                max-width: 88vw;
+                min-width: 0;
+                bottom: 112px;
+            }
+
+            #minimap {
+                width: 164px;
+                height: 164px;
+                top: 14px;
+                right: 12px;
+            }
+
+            #viewmodelSprite {
+                width: 190px;
+                height: 120px;
+                right: 10%;
+                bottom: 8%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="startScreen">
+        <h1 class="title">NEON ARENA</h1>
+        <h2>SELECT YOUR WEAPON</h2>
+        <div class="weapon-selection">
+            <div class="weapon-card" data-weapon="rifle">
+                <h3>Rapid-Fire Rifle</h3>
+                <div class="weapon-stats">
+                    <div>Damage: <span class="stat-bar"><span class="stat-fill" style="width: 60%;"></span></span></div>
+                    <div>Fire Rate: <span class="stat-bar"><span class="stat-fill" style="width: 90%;"></span></span></div>
+                    <div>Range: <span class="stat-bar"><span class="stat-fill" style="width: 80%;"></span></span></div>
+                    <div>Ammo: 30</div>
+                </div>
+            </div>
+            <div class="weapon-card locked" data-weapon="shotgun" data-locked="true">
+                <h3>Heavy Shotgun</h3>
+                <div class="lock-label">Locked</div>
+                <div class="weapon-stats">
+                    <div>Damage: <span class="stat-bar"><span class="stat-fill" style="width: 90%;"></span></span></div>
+                    <div>Fire Rate: <span class="stat-bar"><span class="stat-fill" style="width: 30%;"></span></span></div>
+                    <div>Range: <span class="stat-bar"><span class="stat-fill" style="width: 40%;"></span></span></div>
+                    <div>Ammo: 8</div>
+                </div>
+            </div>
+            <div class="weapon-card locked" data-weapon="sniper" data-locked="true">
+                <h3>Precision Sniper</h3>
+                <div class="lock-label">Locked</div>
+                <div class="weapon-stats">
+                    <div>Damage: <span class="stat-bar"><span class="stat-fill" style="width: 100%;"></span></span></div>
+                    <div>Fire Rate: <span class="stat-bar"><span class="stat-fill" style="width: 20%;"></span></span></div>
+                    <div>Range: <span class="stat-bar"><span class="stat-fill" style="width: 100%;"></span></span></div>
+                    <div>Ammo: 5</div>
+                </div>
+            </div>
+        </div>
+        <button id="startButton">START GAME</button>
+    </div>
+
+    <div id="gameContainer"></div>
+
+    <div id="hudRoot">
+        <div id="hudLeft">
+            <div class="hud-module" id="statusModule">
+                <div class="hud-row">
+                    <span class="hud-label">Health</span>
+                    <div class="hud-bar">
+                        <div id="healthFill" class="hud-bar-fill health"></div>
+                        <div class="hud-bar-track"></div>
+                        <span id="healthValue" class="hud-value">100%</span>
+                    </div>
+                </div>
+                <div class="hud-row">
+                    <span class="hud-label">Light</span>
+                    <div class="hud-bar">
+                        <div id="lightFill" class="hud-bar-fill light"></div>
+                        <div class="hud-bar-track"></div>
+                        <span id="lightValue" class="hud-value">0%</span>
+                    </div>
+                </div>
+                <div class="hud-row">
+                    <span class="hud-label">Sound</span>
+                    <div class="hud-bar">
+                        <div id="soundFill" class="hud-bar-fill sound"></div>
+                        <div class="hud-bar-track"></div>
+                        <span id="soundValue" class="hud-value">0%</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="hud-module" id="combatModule">
+                <div class="hud-row">
+                    <span class="hud-label">Ammo</span>
+                    <div class="hud-bar">
+                        <div id="ammoFill" class="hud-bar-fill ammo"></div>
+                        <div class="hud-bar-track"></div>
+                        <span id="ammoValue" class="hud-value">0/0</span>
+                    </div>
+                </div>
+                <div class="hud-meta">
+                    <span id="roundValue">Round: 1</span>
+                    <span id="floorValue">Floor: 1</span>
+                </div>
+            </div>
+        </div>
+
+        <div id="hudObjective"></div>
+    </div>
+
+    <div id="crosshair"></div>
+    <div id="phaseBanner"></div>
+    <div id="intermissionTimer"></div>
+    <div id="pickupNotice"></div>
+
+    <div id="minimap">
+        <canvas id="minimapCanvas"></canvas>
+    </div>
+
+    <div id="viewmodelSprite" class="weapon-rifle">
+        <div class="vm-part vm-main"></div>
+        <div class="vm-part vm-top"></div>
+        <div class="vm-part vm-front"></div>
+    </div>
+
+    <div id="tacticalGlyph"></div>
+
+    <div id="gameOver">GAME OVER</div>
+    <div id="blackScreen"></div>
+
+    <script type="module" src="/src/main.js"></script>
+</body>
+</html>

@@ -1,106 +1,316 @@
 /**
  * World environment factory
- * Creates the game arena with floor, walls, and lighting
- * 
- * INTENT: Create a visually cohesive arena with tactical cover
- * INTENT: Ensure walls don't spawn too close to player spawn (0,0)
- * INTENT: Provide both ambient and directional lighting with shadows
- * 
- * INVARIANT: Floor must be at Y=0 (rotated -90 degrees on X)
- * INVARIANT: Walls must be at least 5 meters from center (player spawn)
- * INVARIANT: Exactly 10 walls are created for cover
- * INVARIANT: All walls are added to obstacles[] for collision detection
- * INVARIANT: Wall Y position is half its height (so it sits on floor)
- * 
- * DEPENDENCIES: Called by setupScene() during game initialization
- * DEPENDENCIES: Returns obstacles array for collision detection
- * 
- * WALL GENERATION ALGORITHM:
- *   1. Random dimensions: width 2-7m, height 1-3m, depth 2-7m
- *   2. Random position within arena (with 5m margin from edges)
- *   3. Reject positions within 5m of center (player spawn protection)
- *   4. Add to scene and obstacles array
- * 
- * LIGHTING SETUP:
- *   - Ambient: 0x404040 (soft gray fill)
- *   - Directional: White, intensity 0.8, from (0, 20, 10) with shadows
- * 
- * NOTE: Wall spawn uses rejection sampling - may loop multiple times per wall
- * NOTE: Material roughness/metalness gives subtle industrial aesthetic
+ * Creates handcrafted tactical arenas with safe-room start and telemetry zones.
  */
 
-/**
- * Creates the game environment
- * @param {THREE.Scene} scene - The Three.js scene to add objects to
- * @param {number} worldWidth - Width of the arena in meters
- * @param {number} worldDepth - Depth of the arena in meters
- * @returns {Array} Array of obstacle meshes for collision detection
- */
-export function createEnvironment(scene, worldWidth, worldDepth) {
-    const obstacles = [];
-    
-    // Create floor plane - rotated -90 degrees on X to be horizontal
-    const floorGeometry = new THREE.PlaneGeometry(worldWidth, worldDepth);
-    const floorMaterial = new THREE.MeshStandardMaterial({ 
-        color: 0x333344,      // Dark blue-gray
-        roughness: 0.8,       // Matte finish
-        metalness: 0.2        // Slight metallic sheen
+function createWall(scene, obstacles, environmentObjects, { x, y, z, w, h, d, color = 0x444455 }) {
+    const wall = new THREE.Mesh(
+        new THREE.BoxGeometry(w, h, d),
+        new THREE.MeshStandardMaterial({
+            color,
+            roughness: 0.72,
+            metalness: 0.26
+        })
+    );
+
+    wall.position.set(x, y, z);
+    wall.castShadow = true;
+    wall.receiveShadow = true;
+    scene.add(wall);
+    obstacles.push(wall);
+    environmentObjects.push(wall);
+    return wall;
+}
+
+function createBoundaryWalls(scene, obstacles, environmentObjects, worldWidth, worldDepth) {
+    const thickness = 1;
+    const height = 4;
+    const halfW = worldWidth / 2;
+    const halfD = worldDepth / 2;
+
+    createWall(scene, obstacles, environmentObjects, {
+        x: 0, y: height / 2, z: -halfD,
+        w: worldWidth + thickness * 2, h: height, d: thickness
     });
-    const floor = new THREE.Mesh(floorGeometry, floorMaterial);
-    floor.rotation.x = -Math.PI / 2;  // Rotate to horizontal
-    floor.receiveShadow = true;        // Receive shadows from objects
+    createWall(scene, obstacles, environmentObjects, {
+        x: 0, y: height / 2, z: halfD,
+        w: worldWidth + thickness * 2, h: height, d: thickness
+    });
+    createWall(scene, obstacles, environmentObjects, {
+        x: -halfW, y: height / 2, z: 0,
+        w: thickness, h: height, d: worldDepth + thickness * 2
+    });
+    createWall(scene, obstacles, environmentObjects, {
+        x: halfW, y: height / 2, z: 0,
+        w: thickness, h: height, d: worldDepth + thickness * 2
+    });
+}
+
+function createZoneVisualizer(scene, environmentObjects, zone) {
+    const width = zone.bounds.xMax - zone.bounds.xMin;
+    const depth = zone.bounds.zMax - zone.bounds.zMin;
+    const centerX = (zone.bounds.xMin + zone.bounds.xMax) / 2;
+    const centerZ = (zone.bounds.zMin + zone.bounds.zMax) / 2;
+
+    const color = zone.type === 'LIGHT' ? 0xf2df53 : 0x2f8dff;
+    const marker = new THREE.Mesh(
+        new THREE.PlaneGeometry(width, depth),
+        new THREE.MeshBasicMaterial({
+            color,
+            transparent: true,
+            opacity: zone.type === 'LIGHT' ? 0.08 : 0.11,
+            depthWrite: false
+        })
+    );
+
+    marker.rotation.x = -Math.PI / 2;
+    marker.position.set(centerX, 0.02, centerZ);
+    marker.userData.solid = false;
+    marker.userData.telemetryZone = true;
+
+    scene.add(marker);
+    environmentObjects.push(marker);
+}
+
+export function createEnvironment(scene, worldWidth, worldDepth, arenaId = 'arena_alpha') {
+    const obstacles = [];
+    const environmentObjects = [];
+
+    const floor = new THREE.Mesh(
+        new THREE.PlaneGeometry(worldWidth, worldDepth),
+        new THREE.MeshStandardMaterial({
+            color: arenaId === 'arena_beta' ? 0x2b2538 : 0x1d2738,
+            roughness: 0.84,
+            metalness: 0.18
+        })
+    );
+    floor.rotation.x = -Math.PI / 2;
+    floor.receiveShadow = true;
     scene.add(floor);
-    
-    // Generate 10 random walls for tactical cover
-    for (let i = 0; i < 10; i++) {
-        // Random wall dimensions
-        const wallWidth = Math.random() * 5 + 2;   // 2-7 meters
-        const wallHeight = Math.random() * 2 + 1;  // 1-3 meters
-        const wallDepth = Math.random() * 5 + 2;   // 2-7 meters
-        
-        const wallGeometry = new THREE.BoxGeometry(wallWidth, wallHeight, wallDepth);
-        const wallMaterial = new THREE.MeshStandardMaterial({ 
-            color: 0x444455,      // Slightly lighter than floor
-            roughness: 0.7,       // Slightly less rough
-            metalness: 0.3        // More metallic
+    environmentObjects.push(floor);
+
+    createBoundaryWalls(scene, obstacles, environmentObjects, worldWidth, worldDepth);
+
+    const safeRoomCenter = { x: -worldWidth / 2 + 6, z: 0 };
+    const safeRoom = {
+        xMin: safeRoomCenter.x - 3.8,
+        xMax: safeRoomCenter.x + 3.8,
+        zMin: -4.4,
+        zMax: 4.4
+    };
+
+    createWall(scene, obstacles, environmentObjects, {
+        x: safeRoom.xMin,
+        y: 1.6,
+        z: 0,
+        w: 0.8,
+        h: 3.2,
+        d: 8.8,
+        color: 0x55607a
+    });
+    createWall(scene, obstacles, environmentObjects, {
+        x: safeRoomCenter.x,
+        y: 1.6,
+        z: safeRoom.zMin,
+        w: 7.2,
+        h: 3.2,
+        d: 0.8,
+        color: 0x55607a
+    });
+    createWall(scene, obstacles, environmentObjects, {
+        x: safeRoomCenter.x,
+        y: 1.6,
+        z: safeRoom.zMax,
+        w: 7.2,
+        h: 3.2,
+        d: 0.8,
+        color: 0x55607a
+    });
+
+    const gate = createWall(scene, obstacles, environmentObjects, {
+        x: safeRoom.xMax,
+        y: 1.4,
+        z: 0,
+        w: 0.6,
+        h: 2.8,
+        d: 4.2,
+        color: 0x00bcd4
+    });
+    gate.userData.isSafeGate = true;
+    gate.userData.solid = true;
+
+    [
+        { x: -10, z: -10, w: 3.6, h: 2.4, d: 2.8 },
+        { x: -10, z: 10, w: 3.6, h: 2.4, d: 2.8 },
+        { x: -2, z: -4, w: 5.4, h: 2.1, d: 2.4 },
+        { x: -2, z: 4, w: 5.4, h: 2.1, d: 2.4 },
+        { x: 8, z: -12, w: 3.0, h: 2.7, d: 4.2 },
+        { x: 8, z: 12, w: 3.0, h: 2.7, d: 4.2 },
+        { x: 16, z: -4, w: 4.8, h: 2.2, d: 2.2 },
+        { x: 16, z: 4, w: 4.8, h: 2.2, d: 2.2 },
+        { x: 21, z: 0, w: 2.2, h: 2.6, d: 6.4 }
+    ].forEach(block => {
+        createWall(scene, obstacles, environmentObjects, {
+            x: block.x,
+            y: block.h / 2,
+            z: block.z,
+            w: block.w,
+            h: block.h,
+            d: block.d
         });
-        const wall = new THREE.Mesh(wallGeometry, wallMaterial);
+    });
 
-        let wallX, wallZ;
-        let tooClose = true;
-
-        // Rejection sampling: keep trying until position is valid
-        while (tooClose) {
-            // Random position within arena bounds (with 5m margin)
-            wallX = Math.random() * (worldWidth - 10) - (worldWidth/2 - 5);
-            wallZ = Math.random() * (worldDepth - 10) - (worldDepth/2 - 5);
-            
-            // Calculate distance from center (0,0) - player spawn point
-            const distanceFromCenter = Math.sqrt(wallX * wallX + wallZ * wallZ);
-            if (distanceFromCenter > 5) {  // 5 meters is safe distance
-                tooClose = false;
-            }
-        }
-
-        // Position wall so it sits on floor (Y at half height)
-        wall.position.set(wallX, wallHeight/2, wallZ);
-        wall.castShadow = true;      // Cast shadows on other objects
-        wall.receiveShadow = true;   // Receive shadows
-        scene.add(wall);
-        
-        // CRITICAL: Add to obstacles array for collision detection
-        obstacles.push(wall);
-    }
-    
-    // Ambient light - soft fill lighting from all directions
     const ambientLight = new THREE.AmbientLight(0x404040);
     scene.add(ambientLight);
-    
-    // Directional light - main light source with shadows
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-    directionalLight.position.set(0, 20, 10);  // Above and slightly forward
-    directionalLight.castShadow = true;         // Enable shadow casting
+    environmentObjects.push(ambientLight);
+
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.82);
+    directionalLight.position.set(8, 20, 10);
+    directionalLight.castShadow = true;
     scene.add(directionalLight);
-    
-    return obstacles;
+    environmentObjects.push(directionalLight);
+
+    const worldBounds = {
+        minX: -worldWidth / 2 + 1.2,
+        maxX: worldWidth / 2 - 1.2,
+        minZ: -worldDepth / 2 + 1.2,
+        maxZ: worldDepth / 2 - 1.2
+    };
+
+    const lightZones = [
+        {
+            id: 'safe_shadow',
+            type: 'DARK',
+            intensity: 0.75,
+            bounds: {
+                xMin: safeRoom.xMin,
+                xMax: safeRoom.xMax + 3,
+                zMin: safeRoom.zMin,
+                zMax: safeRoom.zMax
+            }
+        },
+        {
+            id: 'center_light',
+            type: 'LIGHT',
+            intensity: 0.7,
+            bounds: {
+                xMin: -6,
+                xMax: 10,
+                zMin: -8,
+                zMax: 8
+            }
+        },
+        {
+            id: 'east_light',
+            type: 'LIGHT',
+            intensity: 0.6,
+            bounds: {
+                xMin: 10,
+                xMax: 24,
+                zMin: -16,
+                zMax: 16
+            }
+        },
+        {
+            id: 'cover_dark_north',
+            type: 'DARK',
+            intensity: 0.55,
+            bounds: {
+                xMin: -14,
+                xMax: 2,
+                zMin: 8,
+                zMax: 22
+            }
+        },
+        {
+            id: 'cover_dark_south',
+            type: 'DARK',
+            intensity: 0.55,
+            bounds: {
+                xMin: -14,
+                xMax: 2,
+                zMin: -22,
+                zMax: -8
+            }
+        }
+    ];
+
+    lightZones.forEach(zone => createZoneVisualizer(scene, environmentObjects, zone));
+
+    const telemetryProbes = [
+        { x: -8, y: 2.1, z: 0, intensity: 0.65 },
+        { x: 0, y: 2.4, z: 0, intensity: 1 },
+        { x: 10, y: 2.5, z: -12, intensity: 0.9 },
+        { x: 10, y: 2.5, z: 12, intensity: 0.9 },
+        { x: 20, y: 2.8, z: 0, intensity: 0.7 }
+    ];
+
+    const mapMeta = {
+        arenaId,
+        playerSpawn: { x: safeRoomCenter.x - 1.4, y: 1.6, z: 0 },
+        safeRoom: {
+            bounds: safeRoom,
+            gate: {
+                mesh: gate,
+                closedY: 1.4,
+                openY: -2.8,
+                isOpen: false
+            }
+        },
+        enemySpawnNodes: [
+            { x: 18, z: -16 },
+            { x: 18, z: 16 },
+            { x: 22, z: 6 },
+            { x: 22, z: -6 },
+            { x: 10, z: -18 },
+            { x: 10, z: 18 },
+            { x: 0, z: -17 },
+            { x: 0, z: 17 }
+        ],
+        pickupNodes: [
+            { x: -8, z: 0 },
+            { x: -1, z: -10 },
+            { x: -1, z: 10 },
+            { x: 7, z: 0 },
+            { x: 14, z: -8 },
+            { x: 14, z: 8 }
+        ],
+        patrolRoutes: [
+            [
+                { x: 8, z: -15 },
+                { x: 16, z: -15 },
+                { x: 19, z: -8 },
+                { x: 12, z: -6 }
+            ],
+            [
+                { x: 8, z: 15 },
+                { x: 16, z: 15 },
+                { x: 19, z: 8 },
+                { x: 12, z: 6 }
+            ],
+            [
+                { x: 2, z: -8 },
+                { x: 8, z: -3 },
+                { x: 2, z: 2 },
+                { x: -3, z: -2 }
+            ],
+            [
+                { x: 2, z: 8 },
+                { x: 8, z: 3 },
+                { x: 2, z: -2 },
+                { x: -3, z: 2 }
+            ]
+        ],
+        worldBounds,
+        lightZones,
+        telemetryProbes
+    };
+
+    return { obstacles, mapMeta, environmentObjects };
+}
+
+export function clearEnvironment(scene, environmentObjects) {
+    if (!environmentObjects || environmentObjects.length === 0) return;
+    environmentObjects.forEach(obj => scene.remove(obj));
+    environmentObjects.length = 0;
 }

@@ -38,8 +38,12 @@ export const CATEGORIES = {
     COLLISION: 'COLLISION', // Wall/obstacle collisions
     MOVEMENT: 'MOVEMENT', // Enemy/player movement
     STATE: 'STATE',       // Game state changes (start, round, game over)
+    PHASE: 'PHASE',       // Phase machine transitions
     INPUT: 'INPUT',       // Keyboard/mouse input
     WEAPON: 'WEAPON',     // Firing, reloading, ammo
+    PICKUP: 'PICKUP',     // Pickup spawn/collection
+    PROGRESSION: 'PROGRESSION', // Unlock flow and level progression
+    AI_STATE: 'AI_STATE', // Enemy finite-state transitions
     ENGINE: 'ENGINE',     // Three.js scene, rendering
     SYSTEM: 'SYSTEM'      // General system messages
 };

@@ -8,6 +8,8 @@
 !src/**
 !src/**/*
 !README.md
+!index.html
+
 
 # Always ignore these common files/folders
 .DS_Store

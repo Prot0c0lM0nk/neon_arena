@@ -28,8 +28,12 @@ export const LOG_CONFIG = {
         COLLISION: false,  // Wall collisions (noisy)
         MOVEMENT: false,   // Enemy/player movement (very noisy)
         STATE: true,       // Game state changes (start, round, over)
+        PHASE: true,       // Countdown/combat/intermission transitions
         INPUT: false,      // Keyboard/mouse input (noisy)
         WEAPON: true,      // Firing, reloading, ammo changes
+        PICKUP: true,      // Pickup spawn/collect logs
+        PROGRESSION: true, // Unlock progression
+        AI_STATE: false,   // Enemy FSM transitions (can be noisy)
         ENGINE: false,     // Three.js scene updates (very noisy)
         SYSTEM: true       // General system messages
     }
@@ -46,8 +50,8 @@ export const PRESETS = {
         minLevel: 0,
         categories: {
             SPAWN: true, COMBAT: true, BULLET: true, COLLISION: true,
-            MOVEMENT: true, STATE: true, INPUT: true, WEAPON: true,
-            ENGINE: true, SYSTEM: true
+            MOVEMENT: true, STATE: true, PHASE: true, INPUT: true, WEAPON: true,
+            PICKUP: true, PROGRESSION: true, AI_STATE: true, ENGINE: true, SYSTEM: true
         }
     },
     
@@ -57,8 +61,8 @@ export const PRESETS = {
         minLevel: 1, // Hide DEBUG
         categories: {
             SPAWN: true, COMBAT: true, BULLET: false, COLLISION: false,
-            MOVEMENT: false, STATE: true, INPUT: false, WEAPON: true,
-            ENGINE: false, SYSTEM: true
+            MOVEMENT: false, STATE: true, PHASE: true, INPUT: false, WEAPON: true,
+            PICKUP: true, PROGRESSION: true, AI_STATE: false, ENGINE: false, SYSTEM: true
         }
     },
     
@@ -68,8 +72,8 @@ export const PRESETS = {
         minLevel: 0,
         categories: {
             SPAWN: true, COMBAT: true, BULLET: true, COLLISION: false,
-            MOVEMENT: false, STATE: true, INPUT: false, WEAPON: true,
-            ENGINE: false, SYSTEM: false
+            MOVEMENT: false, STATE: true, PHASE: true, INPUT: false, WEAPON: true,
+            PICKUP: true, PROGRESSION: true, AI_STATE: true, ENGINE: false, SYSTEM: false
         }
     },
     
@@ -79,8 +83,8 @@ export const PRESETS = {
         minLevel: 0,
         categories: {
             SPAWN: false, COMBAT: false, BULLET: true, COLLISION: true,
-            MOVEMENT: true, STATE: false, INPUT: false, WEAPON: false,
-            ENGINE: false, SYSTEM: false
+            MOVEMENT: true, STATE: false, PHASE: false, INPUT: false, WEAPON: false,
+            PICKUP: false, PROGRESSION: false, AI_STATE: true, ENGINE: false, SYSTEM: false
         }
     },
     
